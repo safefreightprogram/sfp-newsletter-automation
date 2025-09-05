@@ -1,0 +1,11 @@
+{
+  "build": {
+    "command": "npm install"
+  },
+  "start": {
+    "command": "npm start"
+  },
+  "environment": {
+    "NODE_ENV": "production"
+  }
+}
