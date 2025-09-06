@@ -3,6 +3,8 @@ const SheetsManager = require('../config/sheets');
 const { SFP_LOGO_BASE64 } = require('../config/logo-base64');
 const config = require('../config/config');
 const fs = require('fs');
+const EmailSender = require('./emailSender');
+
 
 class NewsletterGenerator {
   constructor() {
@@ -11,6 +13,13 @@ class NewsletterGenerator {
     });
     this.sheetsManager = new SheetsManager();
     
+constructor() {
+  this.openai = new OpenAI({
+    apiKey: config.openai.apiKey
+  });
+  this.sheetsManager = new SheetsManager();
+  this.emailSender = new EmailSender(); 
+
     // SAFE URLs for any synthetic content (VERIFIED EXISTING PAGES)
     this.VERIFIED_URLS = {
       'driver-wellness': 'https://www.healthyheads.org.au/', 
@@ -20,9 +29,9 @@ class NewsletterGenerator {
     };
   }
 
-  async generateNewsletter(segment = 'pro') {
-    try {
-      console.log(`\n📰 Generating newsletter for ${segment} segment...`);
+  async generateNewsletter(segment = 'pro', sendEmail = true) {
+  try {
+    console.log(`📰 Generating newsletter for ${segment} segment...`);
       
       // Initialize sheets
       await this.sheetsManager.initialize();
@@ -96,8 +105,7 @@ class NewsletterGenerator {
         console.error('⚠️ Failed to mark articles as used:', error.message);
       }
 
-      console.log(`✅ Newsletter generated successfully for ${segment} segment`);
-      return {
+const newsletterResult = {
         segment: segment,
         articles: processedArticles,
         html: newsletterHtml,
@@ -105,13 +113,40 @@ class NewsletterGenerator {
         subject: this.getSubjectLine(segment),
         filename: filename
       };
+
+      // Send email if requested
+      if (sendEmail) {
+        console.log(`📧 Sending newsletter via email...`);
+        
+        try {
+          const sendResult = await this.emailSender.sendNewsletter(newsletterResult);
+          
+          console.log(`✅ Email sending completed:`);
+          console.log(`   📤 Sent: ${sendResult.sentCount}`);
+          console.log(`   ❌ Failed: ${sendResult.failedCount}`);
+          console.log(`   📋 Total subscribers: ${sendResult.totalSubscribers}`);
+          
+          newsletterResult.emailSending = sendResult;
+          
+        } catch (emailError) {
+          console.error(`❌ Email sending failed: ${emailError.message}`);
+          newsletterResult.emailSending = {
+            success: false,
+            error: emailError.message
+          };
+        }
+      } else {
+        console.log(`📝 Newsletter generated (email sending disabled)`);
+      }
+
+      console.log(`✅ Newsletter process completed for ${segment} segment`);
+      return newsletterResult;
       
     } catch (error) {
       console.error(`❌ Newsletter generation failed:`, error.message);
       throw error;
     }
   }
-
   // ENHANCED: Priority-based article selection with 7-day filtering
   async getRecentArticles(days = 7, segment = null) {
     try {
