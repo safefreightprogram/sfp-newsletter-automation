@@ -12,14 +12,8 @@ class NewsletterGenerator {
       apiKey: config.openai.apiKey
     });
     this.sheetsManager = new SheetsManager();
+    this.emailSender = new EmailSender(); 
     
-constructor() {
-  this.openai = new OpenAI({
-    apiKey: config.openai.apiKey
-  });
-  this.sheetsManager = new SheetsManager();
-  this.emailSender = new EmailSender(); 
-
     // SAFE URLs for any synthetic content (VERIFIED EXISTING PAGES)
     this.VERIFIED_URLS = {
       'driver-wellness': 'https://www.healthyheads.org.au/', 
