@@ -115,8 +115,8 @@ app.get('/unsubscribe', async (req, res) => {
 // Automated scheduling (only in production)
 if (process.env.NODE_ENV === 'production') {
   // Weekly scraping - every Monday at 6 AM AEST
-  cron.schedule('0 6 * * 1', async () => {
-    console.log('Scheduled scraping started');
+  cron.schedule('30 16 * * *', async () => {
+    console.log('TEST SCRAPING: Started at 4:30 PM AEST');
     try {
       await scrapeAllSources();
       console.log('Scheduled scraping completed');
@@ -128,8 +128,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 
   // Weekly newsletter generation - every Monday at 8 AM AEST
-  cron.schedule('0 8 * * 1', async () => {
-    console.log('Scheduled newsletter generation started');
+  cron.schedule('45 16 * * *', async () => {
+    console.log('TEST NEWSLETTER: Started at 4:45 PM AEST');
     try {
       await generateNewsletter();
       console.log('Scheduled newsletter generation completed');
