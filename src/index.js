@@ -497,7 +497,7 @@ app.get('/api/email-status', async (req, res) => {
         fromAddress: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'Not configured',
         environment: process.env.NODE_ENV || 'development'
       },
-      issues: this.identifyEmailIssues(),
+      issues: identifyEmailIssues(),
       timestamp: new Date().toISOString()
     });
   } catch (error) {
