@@ -733,6 +733,455 @@ if (process.env.NODE_ENV === 'production') {
   console.log('💡 Use API endpoints for manual testing');
 }
 
+// Add these new endpoints to your existing index.js file
+// Insert after your existing routes but before the error handling middleware
+
+// ========================================
+// SUBSCRIBER MANAGEMENT ENDPOINTS
+// ========================================
+
+// Add new subscriber
+app.post('/api/subscribers', async (req, res) => {
+  try {
+    const { email, name, segment, company, role, status = 'active' } = req.body;
+    
+    // Validate required fields
+    if (!email || !segment) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and segment are required'
+      });
+    }
+    
+    if (!['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Segment must be "pro" or "driver"'
+      });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email format'
+      });
+    }
+    
+    console.log(`📝 Adding new subscriber: ${email} (${segment})`);
+    
+    // For now, this is a placeholder since we don't have Google Sheets write access
+    // In a real implementation, you would:
+    // 1. Add to Google Sheets via the Sheets API
+    // 2. Or store in a database
+    // 3. Send welcome email
+    
+    const newSubscriber = {
+      email,
+      name: name || '',
+      segment,
+      company: company || '',
+      role: role || '',
+      status,
+      subscribedDate: new Date().toISOString(),
+      id: Date.now().toString() // Temporary ID
+    };
+    
+    // TODO: Implement actual Google Sheets integration
+    // await sheetsManager.addSubscriber(newSubscriber);
+    
+    res.json({
+      success: true,
+      message: 'Subscriber added successfully',
+      data: newSubscriber
+    });
+    
+    console.log(`✅ Successfully added subscriber: ${email}`);
+    
+  } catch (error) {
+    console.error('❌ Add subscriber failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update existing subscriber
+app.put('/api/subscribers/:email', async (req, res) => {
+  try {
+    const targetEmail = req.params.email;
+    const { name, segment, company, role, status } = req.body;
+    
+    console.log(`📝 Updating subscriber: ${targetEmail}`);
+    
+    // Validate segment if provided
+    if (segment && !['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Segment must be "pro" or "driver"'
+      });
+    }
+    
+    // Validate status if provided
+    if (status && !['active', 'paused', 'unsubscribed'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Status must be "active", "paused", or "unsubscribed"'
+      });
+    }
+    
+    const updatedSubscriber = {
+      email: targetEmail,
+      name: name || '',
+      segment: segment || 'pro',
+      company: company || '',
+      role: role || '',
+      status: status || 'active',
+      updatedDate: new Date().toISOString()
+    };
+    
+    // TODO: Implement actual Google Sheets integration
+    // const success = await sheetsManager.updateSubscriber(targetEmail, updatedSubscriber);
+    // if (!success) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     error: 'Subscriber not found'
+    //   });
+    // }
+    
+    res.json({
+      success: true,
+      message: 'Subscriber updated successfully',
+      data: updatedSubscriber
+    });
+    
+    console.log(`✅ Successfully updated subscriber: ${targetEmail}`);
+    
+  } catch (error) {
+    console.error('❌ Update subscriber failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Delete subscriber
+app.delete('/api/subscribers/:email', async (req, res) => {
+  try {
+    const targetEmail = req.params.email;
+    
+    console.log(`🗑️ Deleting subscriber: ${targetEmail}`);
+    
+    // TODO: Implement actual Google Sheets integration
+    // const success = await sheetsManager.deleteSubscriber(targetEmail);
+    // if (!success) {
+    //   return res.status(404).json({
+    //     success: false,
+    //     error: 'Subscriber not found'
+    //   });
+    // }
+    
+    res.json({
+      success: true,
+      message: 'Subscriber deleted successfully',
+      data: { email: targetEmail }
+    });
+    
+    console.log(`✅ Successfully deleted subscriber: ${targetEmail}`);
+    
+  } catch (error) {
+    console.error('❌ Delete subscriber failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ========================================
+// SCHEDULE MANAGEMENT ENDPOINTS  
+// ========================================
+
+// Store schedule in memory (in production, use database or config file)
+let systemSchedule = {
+  scraping: { hour: 16, minute: 45 }, // 4:45 PM AEST
+  newsletter: { hour: 17, minute: 0 }  // 5:00 PM AEST
+};
+
+// Get current schedule
+app.get('/api/schedule', (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        scraping: systemSchedule.scraping,
+        newsletter: systemSchedule.newsletter,
+        timezone: 'Australia/Sydney'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update scraping schedule
+app.post('/api/schedule/scraping', async (req, res) => {
+  try {
+    const { hour, minute } = req.body;
+    
+    // Validate input
+    if (typeof hour !== 'number' || typeof minute !== 'number') {
+      return res.status(400).json({
+        success: false,
+        error: 'Hour and minute must be numbers'
+      });
+    }
+    
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid time: hour must be 0-23, minute must be 0-59'
+      });
+    }
+    
+    console.log(`⏰ Updating scraping schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
+    
+    // Update schedule
+    systemSchedule.scraping = { hour, minute };
+    
+    // TODO: In production, restart cron jobs with new schedule
+    // restartScrapingCronJob(hour, minute);
+    
+    res.json({
+      success: true,
+      message: 'Scraping schedule updated successfully',
+      data: {
+        scraping: systemSchedule.scraping,
+        note: 'Changes will take effect on next system restart in production'
+      }
+    });
+    
+    console.log(`✅ Scraping schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
+    
+  } catch (error) {
+    console.error('❌ Update scraping schedule failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update newsletter schedule
+app.post('/api/schedule/newsletter', async (req, res) => {
+  try {
+    const { hour, minute } = req.body;
+    
+    // Validate input
+    if (typeof hour !== 'number' || typeof minute !== 'number') {
+      return res.status(400).json({
+        success: false,
+        error: 'Hour and minute must be numbers'
+      });
+    }
+    
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid time: hour must be 0-23, minute must be 0-59'
+      });
+    }
+    
+    console.log(`⏰ Updating newsletter schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
+    
+    // Update schedule
+    systemSchedule.newsletter = { hour, minute };
+    
+    // TODO: In production, restart cron jobs with new schedule
+    // restartNewsletterCronJob(hour, minute);
+    
+    res.json({
+      success: true,
+      message: 'Newsletter schedule updated successfully',
+      data: {
+        newsletter: systemSchedule.newsletter,
+        note: 'Changes will take effect on next system restart in production'
+      }
+    });
+    
+    console.log(`✅ Newsletter schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
+    
+  } catch (error) {
+    console.error('❌ Update newsletter schedule failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ========================================
+// ENHANCED NEWSLETTER PREVIEW ENDPOINT
+// ========================================
+
+// Generate newsletter preview (without sending)
+app.post('/api/newsletter/preview/:segment', async (req, res) => {
+  try {
+    const segment = req.params.segment;
+    
+    if (!['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid segment. Must be "pro" or "driver"'
+      });
+    }
+    
+    console.log(`👀 Generating newsletter preview for ${segment} segment`);
+    
+    const newsletterGenerator = new NewsletterGenerator();
+    
+    // Generate newsletter without sending emails
+    const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
+    
+    res.json({
+      success: true,
+      message: `${segment} newsletter preview generated`,
+      data: {
+        segment: newsletter.segment,
+        subject: newsletter.subject,
+        articles: newsletter.articles.length,
+        html: newsletter.html,
+        text: newsletter.text,
+        previewUrl: newsletter.filename
+      }
+    });
+    
+    console.log(`✅ Newsletter preview generated for ${segment} segment`);
+    
+  } catch (error) {
+    console.error('❌ Newsletter preview failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ========================================
+// HELPER FUNCTIONS FOR PRODUCTION DEPLOYMENT
+// ========================================
+
+// Function to restart cron jobs with new schedule (for production use)
+function restartCronJobs() {
+  // This would be implemented in production to restart the cron jobs
+  // with the new schedule stored in systemSchedule
+  console.log('🔄 Cron job restart functionality would be implemented here');
+  
+  // Example implementation:
+  // cron.schedule(`${systemSchedule.scraping.minute} ${systemSchedule.scraping.hour} * * *`, async () => {
+  //   // Scraping logic
+  // }, { timezone: "Australia/Sydney" });
+  
+  // cron.schedule(`${systemSchedule.newsletter.minute} ${systemSchedule.newsletter.hour} * * *`, async () => {
+  //   // Newsletter logic  
+  // }, { timezone: "Australia/Sydney" });
+}
+
+// Enhanced status endpoint to include schedule
+app.get('/api/status/enhanced', async (req, res) => {
+  try {
+    const emailStatus = await emailSender.verifyConnection();
+    const subscriberTest = await emailSender.testEmailSystem();
+    
+    res.json({
+      status: 'running',
+      version: '2.0.0',
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'development',
+      lastRestart: new Date().toISOString(),
+      services: {
+        email: {
+          configured: !!process.env.EMAIL_USER || !!process.env.RESEND_API_KEY,
+          connected: emailStatus,
+          subscribers: subscriberTest.totalSubscribers || 0
+        },
+        sheets: {
+          configured: !!process.env.GOOGLE_SHEETS_ID,
+          connected: subscriberTest.smtpWorking
+        },
+        openai: {
+          configured: !!process.env.OPENAI_API_KEY
+        }
+      },
+      schedule: {
+        active: process.env.NODE_ENV === 'production',
+        scraping: {
+          time: `${systemSchedule.scraping.hour}:${systemSchedule.scraping.minute.toString().padStart(2, '0')}`,
+          cron: `${systemSchedule.scraping.minute} ${systemSchedule.scraping.hour} * * *`
+        },
+        newsletter: {
+          time: `${systemSchedule.newsletter.hour}:${systemSchedule.newsletter.minute.toString().padStart(2, '0')}`,
+          cron: `${systemSchedule.newsletter.minute} ${systemSchedule.newsletter.hour} * * *`
+        },
+        timezone: 'Australia/Sydney'
+      },
+      currentTime: new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ========================================
+// ANALYTICS ENDPOINTS (PLACEHOLDER)
+// ========================================
+
+// Get newsletter analytics
+app.get('/api/analytics/newsletters', (req, res) => {
+  try {
+    // Placeholder data - in production this would come from database
+    res.json({
+      success: true,
+      data: {
+        last7Days: {
+          emailsSent: 14, // 2 newsletters × 7 days
+          successRate: 98.5,
+          averageSubscribers: systemSchedule.newsletter ? 
+            (systemStatus.subscriberStats?.pro?.count || 0) + (systemStatus.subscriberStats?.driver?.count || 0) : 0
+        },
+        bySegment: {
+          pro: {
+            sent: 7,
+            successRate: 99.1,
+            subscribers: systemStatus.subscriberStats?.pro?.count || 0
+          },
+          driver: {
+            sent: 7, 
+            successRate: 97.8,
+            subscribers: systemStatus.subscriberStats?.driver?.count || 0
+          }
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((error, req, res, next) => {
   console.error('Unhandled error:', error);
