@@ -13,6 +13,8 @@ const EmailSender = require('./emailSender');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const { AdvancedScheduler, setupAdvancedSchedulingEndpoints } = require('./advancedScheduler');
+
 // Initialize email sender
 const emailSender = new EmailSender();
 
@@ -685,53 +687,42 @@ app.get('/unsubscribe', async (req, res) => {
   }
 });
 
-// CORRECTED: Automated scheduling for production
-if (process.env.NODE_ENV === 'production') {
-  console.log('🕒 Production mode: Automated scheduling enabled');
-  console.log('📅 Schedule: 4:45 PM AEST (scraping), 5:00 PM AEST (newsletter + email)');
-  
-  // Content scraping - 4:45 PM AEST daily
-  cron.schedule('45 16 * * *', async () => {
-    console.log('🔍 AUTOMATED SCRAPING: Started at 4:45 PM AEST');
-    try {
-      const results = await scrapeAllSources();
-      console.log(`✅ Scheduled scraping completed - ${results.length} articles found`);
-    } catch (error) {
-      console.error('❌ Scheduled scraping failed:', error);
-    }
-  }, {
-    timezone: "Australia/Sydney"
-  });
+let scheduler;
 
-  // Newsletter generation and sending - 5:00 PM AEST daily
-  cron.schedule('0 17 * * *', async () => {
-    console.log('📧 AUTOMATED NEWSLETTER: Started at 5:00 PM AEST');
-    try {
-      const newsletterGenerator = new NewsletterGenerator();
-      
-      console.log('📊 Generating COR Intel Weekly (pro segment)...');
-      const proNewsletter = await newsletterGenerator.generateNewsletter('pro', true);
-      console.log(`✅ Pro newsletter sent to ${proNewsletter.emailSending?.sentCount || 0} recipients`);
-      
-      await new Promise(resolve => setTimeout(resolve, 10000)); // 10 second delay
-      
-      console.log('🚛 Generating Safe Freight Mate (driver segment)...');
-      const driverNewsletter = await newsletterGenerator.generateNewsletter('driver', true);
-      console.log(`✅ Driver newsletter sent to ${driverNewsletter.emailSending?.sentCount || 0} recipients`);
-      
-      console.log('📧 All newsletters sent successfully');
-      
-    } catch (error) {
-      console.error('❌ Scheduled newsletter generation/sending failed:', error);
-    }
-  }, {
-    timezone: "Australia/Sydney"
-  });
+if (process.env.NODE_ENV === 'production') {
+  console.log('🕐 Production mode: Advanced scheduling enabled');
+  
+  // Initialize advanced scheduler
+  scheduler = new AdvancedScheduler();
+  scheduler.initialize();
+  
+  // Setup API endpoints for schedule management
+  setupAdvancedSchedulingEndpoints(app, scheduler);
   
 } else {
-  console.log('🔧 Development mode: Automated scheduling disabled');
-  console.log('💡 Use API endpoints for manual testing');
+  console.log('🔧 Development mode: Manual testing only');
+  
+  // Create dummy scheduler for development API endpoints
+  scheduler = {
+    getConfiguration: () => ({
+      schedules: {
+        scraping: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 16, minute: 45 },
+        newsletter: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 17, minute: 30 }
+      },
+      nextRuns: { scraping: 'Dev mode - disabled', newsletter: 'Dev mode - disabled' },
+      activeJobs: [],
+      dependencies: {}
+    }),
+    updateSchedule: () => { throw new Error('Scheduling not available in development mode'); },
+    triggerJob: async (jobType) => {
+      console.log(`🔧 Dev mode manual trigger: ${jobType}`);
+      // You can still manually trigger jobs in dev mode
+    }
+  };
+  
+  setupAdvancedSchedulingEndpoints(app, scheduler);
 }
+
 
 // Add these new endpoints to your existing index.js file
 // Insert after your existing routes but before the error handling middleware
