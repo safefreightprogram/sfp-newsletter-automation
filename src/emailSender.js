@@ -159,27 +159,68 @@ class EmailSender {
     }
   }
 
-  // Keep existing Google Sheets methods unchanged
-  async getSubscribersFromSheet(segment) {
-    console.log(`📊 Fetching ${segment} subscribers from Google Sheets...`);
+async getSubscribersFromSheet(segment) {
+    console.log(`📊 Fetching ${segment} subscribers from Google Sheets API...`);
     
-    for (const url of this.SUBSCRIBERS_SHEET_URLS) {
-      try {
-        console.log(`🔗 Trying URL: ${url.substring(0, 80)}...`);
-        const subscribers = await this.fetchSubscribersData(url, segment);
-        
-        if (subscribers && subscribers.length > 0) {
-          console.log(`✅ Successfully loaded ${subscribers.length} ${segment} subscribers`);
-          return subscribers;
-        }
-      } catch (error) {
-        console.error(`❌ Failed to fetch from ${url}:`, error.message);
-        continue;
+    try {
+      const { google } = require('googleapis');
+      
+      const auth = await google.auth.getClient({
+        credentials: {
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+        },
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+      });
+      
+      const sheets = google.sheets({ version: 'v4', auth });
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+        range: 'Subscribers!A:P',
+      });
+      
+      const rows = response.data.values;
+      if (!rows || rows.length <= 1) {
+        console.warn('⚠️ No data found in Google Sheets');
+        return this.getFallbackSubscribers(segment);
       }
+      
+      // Skip header row and filter for the segment
+      const subscribers = [];
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.length < 4) continue;
+        
+        const email = row[1]; // Column B
+        const name = row[2];  // Column C  
+        const subscriberSegment = row[3]; // Column D
+        const status = row[4]; // Column E
+        
+        if (email && 
+            email.includes('@') && 
+            subscriberSegment && 
+            subscriberSegment.toLowerCase() === segment.toLowerCase() &&
+            status && 
+            status.toLowerCase() === 'active') {
+          
+          subscribers.push({
+            email: email.trim(),
+            name: (name || '').trim(),
+            segment: subscriberSegment.trim(),
+            status: status.trim(),
+            subscribedDate: row[6] || new Date().toISOString() // Column G
+          });
+        }
+      }
+      
+      console.log(`✅ Successfully loaded ${subscribers.length} ${segment} subscribers from Google Sheets API`);
+      return subscribers;
+      
+    } catch (error) {
+      console.error('❌ Google Sheets API failed:', error.message);
+      console.warn('⚠️ Falling back to environment variable subscribers');
+      return this.getFallbackSubscribers(segment);
     }
-    
-    console.warn('⚠️ Google Sheets failed, using environment variable fallback');
-    return this.getFallbackSubscribers(segment);
   }
 
   async fetchSubscribersData(url, segment) {
