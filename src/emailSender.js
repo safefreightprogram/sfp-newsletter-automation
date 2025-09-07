@@ -27,7 +27,7 @@ class EmailSender {
     }
     
     // Skip API call to avoid rate limiting
-    console.log('✅ Resend API key configured - skipping connection test');
+    console.log('✅ Resend API key configured - connection assumed valid');
     return true;
   } catch (error) {
     console.error('❌ Resend API verification failed:', error.message);
