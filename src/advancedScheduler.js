@@ -1,3 +1,5 @@
+const cron = require('node-cron');
+
 // Advanced Scheduling System for Newsletter Automation
 // Supports weekly/fortnightly/monthly schedules with scraping dependencies
 
