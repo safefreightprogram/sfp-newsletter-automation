@@ -20,7 +20,7 @@ class EmailSender {
     }
   }
 
-  async verifyConnection() {
+ async verifyConnection() {
   try {
     if (!this.resendApiKey) {
       throw new Error('RESEND_API_KEY not configured');
@@ -34,20 +34,6 @@ class EmailSender {
     return false;
   }
 }
-        headers: {
-          'Authorization': `Bearer ${this.resendApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
-      
-      console.log('✅ Resend API connection verified');
-      return true;
-    } catch (error) {
-      console.error('❌ Resend API connection failed:', error.response?.data || error.message);
-      return false;
-    }
-  }
 
   async sendNewsletter(newsletterData) {
     try {
