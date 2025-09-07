@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const cron = require('node-cron');
 const path = require('path');
+const { google } = require('googleapis');
 
 // Import your modules
 const NewsletterGenerator = require('./generator');        
@@ -543,7 +544,32 @@ function identifyEmailIssues() {
   
   return issues;
 }
-
+// Debug endpoint to test Google Sheets connection
+app.get('/api/debug/sheets-raw', async (req, res) => {
+  try {
+    const auth = await google.auth.getClient({
+      keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      range: 'Subscribers!A1:P10',
+    });
+    
+    res.json({
+      success: true,
+      rawData: response.data.values,
+      rowCount: response.data.values?.length || 0
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 // Enhanced system status
 app.get('/api/status', async (req, res) => {
   try {
