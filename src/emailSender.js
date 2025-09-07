@@ -21,13 +21,19 @@ class EmailSender {
   }
 
   async verifyConnection() {
-    try {
-      if (!this.resendApiKey) {
-        throw new Error('RESEND_API_KEY not configured');
-      }
-      
-      // Test Resend API with a validation call
-      const response = await axios.get('https://api.resend.com/domains', {
+  try {
+    if (!this.resendApiKey) {
+      throw new Error('RESEND_API_KEY not configured');
+    }
+    
+    // Skip API call to avoid rate limiting
+    console.log('✅ Resend API key configured - skipping connection test');
+    return true;
+  } catch (error) {
+    console.error('❌ Resend API verification failed:', error.message);
+    return false;
+  }
+}
         headers: {
           'Authorization': `Bearer ${this.resendApiKey}`,
           'Content-Type': 'application/json'
