@@ -82,7 +82,7 @@ app.get('/', (req, res) => {
 // ENHANCED: Manual scraping with better feedback
 app.post('/api/scrape', async (req, res) => {
   try {
-    console.log('🔡 Manual scrape triggered');
+    console.log('📡 Manual scrape triggered');
     const startTime = Date.now();
     
     const results = await scrapeAllSources();
@@ -244,60 +244,6 @@ app.get('/api/subscribers/:segment?', async (req, res) => {
     }
   } catch (error) {
     console.error('❌ Subscriber fetch failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// NEW: Add subscriber endpoint
-app.post('/api/subscribers', async (req, res) => {
-  try {
-    const { email, name, segment, company, role } = req.body;
-    
-    if (!email || !segment) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and segment are required'
-      });
-    }
-    
-    if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Segment must be "pro" or "driver"'
-      });
-    }
-    
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid email format'
-      });
-    }
-    
-    // This would require implementing a method to add to Google Sheets
-    // For now, return a placeholder response
-    res.json({
-      success: true,
-      message: 'Subscriber addition requested',
-      data: {
-        email,
-        name: name || '',
-        segment,
-        company: company || '',
-        role: role || '',
-        status: 'pending',
-        subscribedDate: new Date().toISOString()
-      },
-      note: 'Manual addition to Google Sheets required'
-    });
-    
-  } catch (error) {
-    console.error('❌ Add subscriber failed:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1104,7 +1050,7 @@ app.post('/api/schedule/scraping', async (req, res) => {
       });
     }
     
-    console.log(`⏰ Updating scraping schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
+    console.log(`Updating scraping schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
     
     // Update schedule
     systemSchedule.scraping = { hour, minute };
@@ -1121,10 +1067,10 @@ app.post('/api/schedule/scraping', async (req, res) => {
       }
     });
     
-    console.log(`✅ Scraping schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
+    console.log(`Scraping schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
     
   } catch (error) {
-    console.error('❌ Update scraping schedule failed:', error);
+    console.error('Update scraping schedule failed:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1152,7 +1098,7 @@ app.post('/api/schedule/newsletter', async (req, res) => {
       });
     }
     
-    console.log(`⏰ Updating newsletter schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
+    console.log(`Updating newsletter schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
     
     // Update schedule
     systemSchedule.newsletter = { hour, minute };
@@ -1169,10 +1115,10 @@ app.post('/api/schedule/newsletter', async (req, res) => {
       }
     });
     
-    console.log(`✅ Newsletter schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
+    console.log(`Newsletter schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
     
   } catch (error) {
-    console.error('❌ Update newsletter schedule failed:', error);
+    console.error('Update newsletter schedule failed:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1196,7 +1142,7 @@ app.post('/api/newsletter/preview/:segment', async (req, res) => {
       });
     }
     
-    console.log(`👀 Generating newsletter preview for ${segment} segment`);
+    console.log(`Generating newsletter preview for ${segment} segment`);
     
     const newsletterGenerator = new NewsletterGenerator();
     
@@ -1216,10 +1162,10 @@ app.post('/api/newsletter/preview/:segment', async (req, res) => {
       }
     });
     
-    console.log(`✅ Newsletter preview generated for ${segment} segment`);
+    console.log(`Newsletter preview generated for ${segment} segment`);
     
   } catch (error) {
-    console.error('❌ Newsletter preview failed:', error);
+    console.error('Newsletter preview failed:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -1235,7 +1181,7 @@ app.post('/api/newsletter/preview/:segment', async (req, res) => {
 function restartCronJobs() {
   // This would be implemented in production to restart the cron jobs
   // with the new schedule stored in systemSchedule
-  console.log('🔄 Cron job restart functionality would be implemented here');
+  console.log('Cron job restart functionality would be implemented here');
   
   // Example implementation:
   // cron.schedule(`${systemSchedule.scraping.minute} ${systemSchedule.scraping.hour} * * *`, async () => {
@@ -1358,62 +1304,62 @@ app.use((req, res) => {
 
 // Start server with enhanced startup checks
 app.listen(PORT, async () => {
-  console.log(`🚀 SFP Newsletter Automation v2.0 running on port ${PORT}`);
-  console.log(`🏥 Health check: https://sfp-newsletter-automation-production.up.railway.app/health`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🕒 Current Sydney time: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}`);
+  console.log(`SFP Newsletter Automation v2.0 running on port ${PORT}`);
+  console.log(`Health check: https://sfp-newsletter-automation-production.up.railway.app/health`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Current Sydney time: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}`);
   
   // Enhanced startup checks
-  console.log('\n🔍 Running startup diagnostics...');
+  console.log('\nRunning startup diagnostics...');
   
   // Check email configuration
   if (process.env.EMAIL_USER && process.env.NEWSLETTER_RECIPIENTS) {
-    console.log('📧 Email configuration detected');
+    console.log('Email configuration detected');
     
     // Check FROM address configuration
     const fromEmail = process.env.EMAIL_FROM && process.env.EMAIL_FROM.includes('@') 
       ? process.env.EMAIL_FROM 
       : process.env.EMAIL_USER;
-    console.log(`📮 From: ${fromEmail}`);
+    console.log(`From: ${fromEmail}`);
     
     // Verify SMTP connection
     try {
       const verified = await emailSender.verifyConnection();
       if (verified) {
-        console.log('✅ Email server connection verified');
+        console.log('Email server connection verified');
         
         // Test subscriber system
         try {
           const testResult = await emailSender.testEmailSystem();
-          console.log('📊 Subscriber System Status:');
+          console.log('Subscriber System Status:');
           console.log(`   Pro Subscribers: ${testResult.proSubscribers}`);
           console.log(`   Driver Subscribers: ${testResult.driverSubscribers}`);
           console.log(`   Total Subscribers: ${testResult.totalSubscribers}`);
           
           if (testResult.totalSubscribers === 0) {
-            console.log('⚠️  No subscribers found - check Google Sheets configuration');
+            console.log('No subscribers found - check Google Sheets configuration');
           }
         } catch (error) {
-          console.log('⚠️  Subscriber system test failed:', error.message);
+          console.log('Subscriber system test failed:', error.message);
         }
       } else {
-        console.log('❌ Email server connection failed');
-        console.log('💡 Check EMAIL_PASS - consider using Gmail App Password');
+        console.log('Email server connection failed');
+        console.log('Check EMAIL_PASS - consider using Gmail App Password');
       }
     } catch (error) {
-      console.log('❌ Email configuration error:', error.message);
+      console.log('Email configuration error:', error.message);
     }
   } else {
-    console.log('⚠️  Email not configured - set EMAIL_USER and NEWSLETTER_RECIPIENTS env vars');
+    console.log('Email not configured - set EMAIL_USER and NEWSLETTER_RECIPIENTS env vars');
   }
   
   // Check other services
-  console.log('\n🔧 Service Configuration:');
-  console.log(`   Google Sheets: ${process.env.GOOGLE_SHEETS_ID ? '✅ Configured' : '❌ Missing'}`);
-  console.log(`   OpenAI API: ${process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ Missing'}`);
-  console.log(`   Scheduled Tasks: ${process.env.NODE_ENV === 'production' ? '✅ Active' : '⏸️  Disabled (dev mode)'}`);
+  console.log('\nService Configuration:');
+  console.log(`   Google Sheets: ${process.env.GOOGLE_SHEETS_ID ? 'Configured' : 'Missing'}`);
+  console.log(`   OpenAI API: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Missing'}`);
+  console.log(`   Scheduled Tasks: ${process.env.NODE_ENV === 'production' ? 'Active' : 'Disabled (dev mode)'}`);
   
-  console.log('\n🎯 Ready for operation!');
+  console.log('\nReady for operation!');
 });
 
 // Graceful shutdown
