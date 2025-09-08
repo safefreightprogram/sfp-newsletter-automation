@@ -760,12 +760,11 @@ if (process.env.NODE_ENV === 'production') {
 // SUBSCRIBER MANAGEMENT ENDPOINTS
 // ========================================
 
-// Add new subscriber
+// Add new subscriber (append to sheet)
 app.post('/api/subscribers', async (req, res) => {
   try {
     const { email, name, segment, company, role, status = 'active' } = req.body;
     
-    // Validate required fields
     if (!email || !segment) {
       return res.status(400).json({
         success: false,
@@ -780,7 +779,6 @@ app.post('/api/subscribers', async (req, res) => {
       });
     }
     
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -789,38 +787,83 @@ app.post('/api/subscribers', async (req, res) => {
       });
     }
     
-    console.log(`📝 Adding new subscriber: ${email} (${segment})`);
+    console.log(`Adding new subscriber: ${email} (${segment})`);
     
-    // For now, this is a placeholder since we don't have Google Sheets write access
-    // In a real implementation, you would:
-    // 1. Add to Google Sheets via the Sheets API
-    // 2. Or store in a database
-    // 3. Send welcome email
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
     
-    const newSubscriber = {
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    // Check if subscriber already exists
+    const existingCheck = await sheets.spreadsheets.values.get({
+      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      range: 'Subscribers!A:P',
+    });
+    
+    const existingRows = existingCheck.data.values || [];
+    for (let i = 1; i < existingRows.length; i++) {
+      if (existingRows[i][1] && existingRows[i][1].toLowerCase() === email.toLowerCase()) {
+        return res.status(409).json({
+          success: false,
+          error: 'Subscriber already exists'
+        });
+      }
+    }
+    
+    const subscriberId = `SUB-${Date.now()}`;
+    const timestamp = new Date().toISOString();
+    
+    const newSubscriberData = [
+      subscriberId,
       email,
-      name: name || '',
+      name || '',
       segment,
-      company: company || '',
-      role: role || '',
       status,
-      subscribedDate: new Date().toISOString(),
-      id: Date.now().toString() // Temporary ID
-    };
+      '',
+      timestamp,
+      '',
+      '',
+      company || '',
+      role || '',
+      '',
+      timestamp,
+      '',
+      '',
+      'weekly'
+    ];
     
-    // TODO: Implement actual Google Sheets integration
-    // await sheetsManager.addSubscriber(newSubscriber);
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      range: 'Subscribers!A:P',
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [newSubscriberData]
+      }
+    });
+    
+    console.log(`Successfully added subscriber ${email}`);
     
     res.json({
       success: true,
       message: 'Subscriber added successfully',
-      data: newSubscriber
+      data: {
+        subscriberId,
+        email,
+        name: name || '',
+        segment,
+        status,
+        subscribedAt: timestamp
+      }
     });
     
-    console.log(`✅ Successfully added subscriber: ${email}`);
-    
   } catch (error) {
-    console.error('❌ Add subscriber failed:', error);
+    console.error('Add subscriber failed:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -834,17 +877,8 @@ app.put('/api/subscribers/:email', async (req, res) => {
     const targetEmail = req.params.email;
     const { name, segment, company, role, status } = req.body;
     
-    console.log(`📝 Updating subscriber: ${targetEmail}`);
+    console.log(`Updating subscriber: ${targetEmail}`);
     
-    // Validate segment if provided
-    if (segment && !['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Segment must be "pro" or "driver"'
-      });
-    }
-    
-    // Validate status if provided
     if (status && !['active', 'paused', 'unsubscribed'].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -852,35 +886,95 @@ app.put('/api/subscribers/:email', async (req, res) => {
       });
     }
     
-    const updatedSubscriber = {
-      email: targetEmail,
-      name: name || '',
-      segment: segment || 'pro',
-      company: company || '',
-      role: role || '',
-      status: status || 'active',
-      updatedDate: new Date().toISOString()
-    };
+    if (segment && !['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Segment must be "pro" or "driver"'
+      });
+    }
     
-    // TODO: Implement actual Google Sheets integration
-    // const success = await sheetsManager.updateSubscriber(targetEmail, updatedSubscriber);
-    // if (!success) {
-    //   return res.status(404).json({
-    //     success: false,
-    //     error: 'Subscriber not found'
-    //   });
-    // }
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    // Find the subscriber row
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      range: 'Subscribers!A:P',
+    });
+    
+    const rows = response.data.values;
+    let targetRowIndex = -1;
+    let currentData = null;
+    
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][1] && rows[i][1].toLowerCase() === targetEmail.toLowerCase()) {
+        targetRowIndex = i + 1;
+        currentData = rows[i];
+        break;
+      }
+    }
+    
+    if (targetRowIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: 'Subscriber not found'
+      });
+    }
+    
+    // Prepare update data
+    const updateData = [
+      currentData[0] || '',
+      targetEmail,
+      name || currentData[2] || '',
+      segment || currentData[3] || 'pro',
+      status || currentData[4] || 'active',
+      currentData[5] || '',
+      currentData[6] || new Date().toISOString(),
+      currentData[7] || '',
+      currentData[8] || '',
+      company || currentData[9] || '',
+      role || currentData[10] || '',
+      currentData[11] || '',
+      new Date().toISOString(), // Updated_At
+      currentData[13] || '',
+      currentData[14] || '',
+      currentData[15] || ''
+    ];
+    
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      range: `Subscribers!A${targetRowIndex}:P${targetRowIndex}`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [updateData]
+      }
+    });
+    
+    console.log(`Successfully updated subscriber ${targetEmail}`);
     
     res.json({
       success: true,
       message: 'Subscriber updated successfully',
-      data: updatedSubscriber
+      data: {
+        email: targetEmail,
+        name: updateData[2],
+        segment: updateData[3],
+        status: updateData[4],
+        company: updateData[9],
+        role: updateData[10],
+        updatedAt: updateData[12]
+      }
     });
     
-    console.log(`✅ Successfully updated subscriber: ${targetEmail}`);
-    
   } catch (error) {
-    console.error('❌ Update subscriber failed:', error);
+    console.error('Update subscriber failed:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -893,16 +987,59 @@ app.delete('/api/subscribers/:email', async (req, res) => {
   try {
     const targetEmail = req.params.email;
     
-    console.log(`🗑️ Deleting subscriber: ${targetEmail}`);
+    console.log(`Deleting subscriber: ${targetEmail}`);
     
-    // TODO: Implement actual Google Sheets integration
-    // const success = await sheetsManager.deleteSubscriber(targetEmail);
-    // if (!success) {
-    //   return res.status(404).json({
-    //     success: false,
-    //     error: 'Subscriber not found'
-    //   });
-    // }
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    // Find the subscriber row
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      range: 'Subscribers!A:P',
+    });
+    
+    const rows = response.data.values;
+    let targetRowIndex = -1;
+    
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][1] && rows[i][1].toLowerCase() === targetEmail.toLowerCase()) {
+        targetRowIndex = i;
+        break;
+      }
+    }
+    
+    if (targetRowIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: 'Subscriber not found'
+      });
+    }
+    
+    // Delete the row
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: 0,
+              dimension: 'ROWS',
+              startIndex: targetRowIndex,
+              endIndex: targetRowIndex + 1
+            }
+          }
+        }]
+      }
+    });
+    
+    console.log(`Successfully deleted subscriber ${targetEmail}`);
     
     res.json({
       success: true,
@@ -910,17 +1047,14 @@ app.delete('/api/subscribers/:email', async (req, res) => {
       data: { email: targetEmail }
     });
     
-    console.log(`✅ Successfully deleted subscriber: ${targetEmail}`);
-    
   } catch (error) {
-    console.error('❌ Delete subscriber failed:', error);
+    console.error('Delete subscriber failed:', error);
     res.status(500).json({
       success: false,
       error: error.message
     });
   }
 });
-
 // ========================================
 // SCHEDULE MANAGEMENT ENDPOINTS  
 // ========================================
