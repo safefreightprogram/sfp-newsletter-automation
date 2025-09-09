@@ -1436,6 +1436,35 @@ app.get('/api/schedule-status', (req, res) => {
   });
 });
 
+// Add this debug endpoint to your index.js
+app.get('/api/debug', (req, res) => {
+  const debug = {
+    timestamp: new Date().toISOString(),
+    nodeEnv: process.env.NODE_ENV,
+    environment: {
+      hasGoogleEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
+      hasGoogleKey: !!process.env.GOOGLE_PRIVATE_KEY,
+      hasSheetsId: !!process.env.GOOGLE_SHEETS_ID
+    },
+    modules: {}
+  };
+  
+  try {
+    const scraper = require('./scraper');
+    debug.modules.scraper = {
+      available: true,
+      exports: Object.keys(scraper)
+    };
+  } catch (error) {
+    debug.modules.scraper = {
+      available: false,
+      error: error.message
+    };
+  }
+  
+  res.json(debug);
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
