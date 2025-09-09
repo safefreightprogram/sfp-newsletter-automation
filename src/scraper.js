@@ -566,6 +566,29 @@ async function runEnhancedScrapeAndSave() {
   }
 }
 
+// Replace the entire end section of your scraper.js file (from line with "// Allow both direct execution and module import") with this:
+
+// Add Railway compatibility wrapper function
+async function scrapeAllSources() {
+  console.log('🔄 Railway scraper wrapper called');
+  
+  try {
+    const scraper = new EnhancedNewsScraper();
+    const articles = await scraper.scrapeAllSources();
+    
+    return {
+      success: true,
+      articles: articles,
+      count: articles.length,
+      timestamp: new Date().toISOString(),
+      errors: scraper.errors
+    };
+  } catch (error) {
+    console.error('❌ Scraper wrapper error:', error);
+    throw error;
+  }
+}
+
 // Allow both direct execution and module import
 if (require.main === module) {
   runEnhancedScrapeAndSave().then(() => {
@@ -577,4 +600,9 @@ if (require.main === module) {
   });
 }
 
-module.exports = { EnhancedNewsScraper, runEnhancedScrapeAndSave };
+// Export all functions including the Railway compatibility wrapper
+module.exports = { 
+  EnhancedNewsScraper, 
+  runEnhancedScrapeAndSave,
+  scrapeAllSources  // <-- This is what index.js needs
+};
