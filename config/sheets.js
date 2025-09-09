@@ -45,8 +45,12 @@ async initialize() {
     }
 
     // Initialize document
-    this.doc = new GoogleSpreadsheet(spreadsheetId, serviceAccountAuth);
-    await this.doc.loadInfo();
+    // Initialize document & authenticate
+this.doc = new GoogleSpreadsheet(spreadsheetId);
+await serviceAccountAuth.authorize();                 // ensure JWT is authorized
+await this.doc.useOAuth2Client(serviceAccountAuth);   // attach authorized client
+await this.doc.loadInfo();
+
     
     console.log(`✅ Connected to: ${this.doc.title}`);
     
@@ -73,7 +77,7 @@ async initialize() {
   async getExistingHashes() {
     try {
       const rows = await this.contentSheet.getRows();
-      return rows.map(row => row.Content_Hash).filter(Boolean);
+      return rows.map(row => row.get('Content_Hash')).filter(Boolean);
     } catch (error) {
       console.log('No existing hashes found or error reading:', error.message);
       return [];
@@ -295,24 +299,29 @@ const segmentMatch = !seg || rowSegmentTag === 'both' || rowSegmentTag === seg |
 
   async logNewsletterToArchive(newsletterData) {
     try {
-      const sheet = this.doc.sheetsByTitle['Content_Archive'];
-      if (!sheet) {
-        throw new Error('Content_Archive sheet not found');
-      }
-      
-      const row = [
-        newsletterData.issue_id,
-        newsletterData.segment,
-        newsletterData.subject,
-        newsletterData.published_at,
-        newsletterData.sent_count,
-        newsletterData.failed_count,
-        newsletterData.open_rate,
-        newsletterData.click_rate,
-        newsletterData.content_json
-      ];
-      
-      await sheet.addRow(row);
+      let sheet = this.doc.sheetsByTitle['Content_Archive'];
+if (!sheet) {
+  sheet = await this.doc.addSheet({
+    title: 'Content_Archive',
+    headerValues: [
+      'Issue_ID','Segment','Subject','Published_At',
+      'Sent_Count','Failed_Count','Open_Rate','Click_Rate','Content_JSON'
+    ],
+  });
+}
+
+await sheet.addRow({
+  Issue_ID:     newsletterData.issue_id,
+  Segment:      newsletterData.segment,
+  Subject:      newsletterData.subject,
+  Published_At: newsletterData.published_at,
+  Sent_Count:   newsletterData.sent_count,
+  Failed_Count: newsletterData.failed_count,
+  Open_Rate:    newsletterData.open_rate,
+  Click_Rate:   newsletterData.click_rate,
+  Content_JSON: newsletterData.content_json,
+});
+
       return true;
     } catch (error) {
       console.error('Error logging newsletter to archive:', error.message);
