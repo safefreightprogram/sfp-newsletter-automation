@@ -10,51 +10,66 @@ class SheetsManager {
     this.contentSheet = null;
   }
 
-  async initialize() {
-    try {
-      console.log('📊 Connecting to Google Sheets...');
-      
-      // Load service account credentials
-      const credentialsPath = process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './config/google-credentials.json';
-      
-      if (!fs.existsSync(credentialsPath)) {
-        throw new Error(`Credentials file not found: ${credentialsPath}`);
-      }
-      
-      const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-      
-      // Create JWT auth
-      const serviceAccountAuth = new JWT({
-        email: credentials.client_email,
-        key: credentials.private_key,
-        scopes: [
-          'https://www.googleapis.com/auth/spreadsheets',
-          'https://www.googleapis.com/auth/drive.file',
-        ],
-      });
+// Replace the initialize() method in your sheets.js with this Railway-compatible version:
 
-      // Initialize document
-      this.doc = new GoogleSpreadsheet(this.spreadsheetId, serviceAccountAuth);
-      await this.doc.loadInfo();
-      
-      console.log(`✅ Connected to: ${this.doc.title}`);
-      
-      // Get the Article_Archive sheet (the new one we created)
-      this.contentSheet = this.doc.sheetsByTitle['Article_Archive'];
-      if (!this.contentSheet) {
-        throw new Error('Article_Archive sheet not found. Please run setup-content-sheet.js first.');
-      }
-      
-      await this.contentSheet.loadHeaderRow();
-      console.log(`✅ Article_Archive sheet ready (${this.contentSheet.rowCount - 1} existing rows)`);
-      
-      return true;
-    } catch (error) {
-      console.error('❌ Failed to connect to Google Sheets:', error.message);
-      return false;
+async initialize() {
+  try {
+    console.log('📊 Connecting to Google Sheets...');
+    
+    // Use environment variables instead of file for Railway
+    const credentials = {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY ? 
+        process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') : null
+    };
+    
+    // Validate credentials
+    if (!credentials.client_email || !credentials.private_key) {
+      throw new Error('Missing Google Sheets credentials in environment variables. Please set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY');
     }
-  }
+    
+    // Create JWT auth
+    const serviceAccountAuth = new JWT({
+      email: credentials.client_email,
+      key: credentials.private_key,
+      scopes: [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file',
+      ],
+    });
 
+    // Use spreadsheet ID from config or environment
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID || this.spreadsheetId;
+    if (!spreadsheetId) {
+      throw new Error('Missing GOOGLE_SHEETS_ID in environment variables');
+    }
+
+    // Initialize document
+    this.doc = new GoogleSpreadsheet(spreadsheetId, serviceAccountAuth);
+    await this.doc.loadInfo();
+    
+    console.log(`✅ Connected to: ${this.doc.title}`);
+    
+    // Get the Article_Archive sheet
+    this.contentSheet = this.doc.sheetsByTitle['Article_Archive'];
+    if (!this.contentSheet) {
+      console.log('📄 Creating Article_Archive sheet...');
+      this.contentSheet = await this.doc.addSheet({
+        title: 'Article_Archive',
+        headerValues: ['ID', 'Date_Collected', 'Source', 'Title', 'URL', 'Published_Date', 'Summary', 'Used_In_Issue', 'Content_Hash', 'Relevance_Score', 'Segment_Tag']
+      });
+    }
+    
+    await this.contentSheet.loadHeaderRow();
+    console.log(`✅ Article_Archive sheet ready (${this.contentSheet.rowCount - 1} existing rows)`);
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to connect to Google Sheets:', error.message);
+    return false;
+  }
+}      
+     
   async getExistingHashes() {
     try {
       const rows = await this.contentSheet.getRows();
@@ -184,11 +199,16 @@ class SheetsManager {
       const recentArticles = [];
       
       for (const row of rows) {
-        const dateCollected = new Date(row.get('Date_Collected') || row.get('Published_Date'));
-        const isRecent = dateCollected >= cutoffDate;
+        const published = row.get('Published_Date') ? new Date(row.get('Published_Date')) : null;
+const collected = row.get('Date_Collected') ? new Date(row.get('Date_Collected')) : null;
+const chosenDate = published || collected;  // prefer published
+const isRecent = chosenDate ? chosenDate >= cutoffDate : false;
+
         const isUnused = !row.get('Used_In_Issue') || row.get('Used_In_Issue') === '';
-        const rowSegmentTag = row.get('Segment_Tag');
-        const segmentMatch = !segment || rowSegmentTag === segment || rowSegmentTag === 'both';
+        const rowSegmentTag = (row.get('Segment_Tag') || '').toLowerCase();
+const seg = (segment || '').toLowerCase();
+const segmentMatch = !seg || rowSegmentTag === 'both' || rowSegmentTag === seg || rowSegmentTag.includes(seg); // matches 'pro-2025-09-04'
+
         
         if (isRecent && isUnused && segmentMatch) {
           recentArticles.push({
