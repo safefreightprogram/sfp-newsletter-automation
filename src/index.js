@@ -86,19 +86,22 @@ app.post('/api/scrape', async (req, res) => {
     const startTime = Date.now();
     
     const results = await scrapeAllSources();
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    
-    res.json({ 
-      success: true, 
-      message: 'Scraping completed successfully',
-      results: {
-        articlesFound: results.length,
-        duration: `${duration} seconds`,
-        highQuality: results.filter(a => a.relevanceScore > 10).length,
-        mediumQuality: results.filter(a => a.relevanceScore >= 5 && a.relevanceScore <= 10).length,
-        timestamp: new Date().toISOString()
-      }
-    });
+const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+// Fix: Use results.articles instead of results
+const articles = results.articles || [];
+
+res.json({ 
+  success: true, 
+  message: 'Scraping completed successfully',
+  results: {
+    articlesFound: articles.length,
+    duration: `${duration} seconds`,
+    highQuality: articles.filter(a => a.relevanceScore > 10).length,
+    mediumQuality: articles.filter(a => a.relevanceScore >= 5 && a.relevanceScore <= 10).length,
+    timestamp: new Date().toISOString()
+  }
+});
   } catch (error) {
     console.error('❌ Scraping failed:', error);
     res.status(500).json({ 
