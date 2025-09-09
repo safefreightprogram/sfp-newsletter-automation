@@ -1362,6 +1362,97 @@ app.listen(PORT, async () => {
   console.log('\nReady for operation!');
 });
 
+// Add these endpoints to your src/index.js file
+
+// Debug endpoint to diagnose issues
+app.get('/api/debug', (req, res) => {
+  const debug = {
+    timestamp: new Date().toISOString(),
+    nodeEnv: process.env.NODE_ENV,
+    isProduction: process.env.NODE_ENV === 'production',
+    
+    // Check file system
+    fileSystem: {
+      currentDir: process.cwd(),
+      files: []
+    },
+    
+    // Check environment variables (safely)
+    environment: {
+      hasOpenAI: !!process.env.OPENAI_API_KEY,
+      hasGoogleEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
+      hasGoogleKey: !!process.env.GOOGLE_PRIVATE_KEY,
+      hasResendKey: !!process.env.RESEND_API_KEY,
+      hasSheetsId: !!process.env.GOOGLE_SHEETS_ID
+    },
+    
+    // Check memory usage
+    memory: process.memoryUsage(),
+    
+    // Check module availability
+    modules: {}
+  };
+  
+  // Check if files exist
+  const fs = require('fs');
+  const path = require('path');
+  
+  try {
+    const files = fs.readdirSync('./src');
+    debug.fileSystem.files = files;
+  } catch (error) {
+    debug.fileSystem.error = error.message;
+  }
+  
+  // Check if scraper module can be imported
+  try {
+    const scraper = require('./scraper');
+    debug.modules.scraper = {
+      available: true,
+      exports: Object.keys(scraper)
+    };
+  } catch (error) {
+    debug.modules.scraper = {
+      available: false,
+      error: error.message
+    };
+  }
+  
+  res.json(debug);
+});
+
+// Schedule status endpoint
+app.get('/api/schedule-status', (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  res.json({
+    nodeEnv: process.env.NODE_ENV,
+    isProduction,
+    schedulingEnabled: isProduction,
+    timestamp: new Date().toISOString(),
+    timezone: 'Australia/Sydney',
+    nextScheduledRun: isProduction ? 'Automated scheduling active' : 'Disabled (not in production)',
+    manualTriggersAvailable: true
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'SFP Newsletter Automation API',
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      'GET / - This message',
+      'GET /api/debug - System diagnostics',
+      'GET /api/schedule-status - Scheduler status',
+      'POST /api/scrape - Manual scraping',
+      'GET /api/subscribers - View subscribers',
+      'POST /api/subscribers - Add subscriber'
+    ]
+  });
+});
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
