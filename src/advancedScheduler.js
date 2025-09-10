@@ -218,19 +218,36 @@ class AdvancedScheduler {
   }
 
   // Execute the actual job function
-  async runJobFunction(jobType) {
-    switch (jobType) {
-      case 'scraping':
-        const { scrapeAllSources } = require('./scraper');
-        const results = await scrapeAllSources();
-        console.log(`📊 Scraping completed: ${results.length} articles found`);
-        break;
-        
-      case 'newsletter':
-        const NewsletterGenerator = require('./generator');
-        const generator = new NewsletterGenerator();
-        
-        // Generate both newsletters
+async runJobFunction(jobType) {
+  switch (jobType) {
+    case 'scraping':
+      const { scrapeAllSources } = require('./scraper');
+      const results = await scrapeAllSources();
+      
+      // Fix: Handle the correct response format
+      const articles = results.articles || results || [];
+      console.log(`📊 Scraping completed: ${articles.length} articles found`);
+      
+      // Save to Google Sheets if articles found
+      if (articles.length > 0) {
+        try {
+          const SheetsManager = require('../config/sheets');
+          const sheetsManager = new SheetsManager();
+          await sheetsManager.initialize();
+          await sheetsManager.saveArticles(articles);
+          console.log(`💾 Articles saved to Google Sheets`);
+        } catch (error) {
+          console.error('⚠️ Failed to save to sheets:', error.message);
+        }
+      }
+      break;
+      
+    case 'newsletter':
+      const NewsletterGenerator = require('./generator');
+      const generator = new NewsletterGenerator();
+      
+      try {
+        // Generate both newsletters with error handling
         console.log('📧 Generating COR Intel Weekly...');
         await generator.generateNewsletter('pro', true);
         
@@ -239,13 +256,17 @@ class AdvancedScheduler {
         console.log('📧 Generating Safe Freight Mate...');
         await generator.generateNewsletter('driver', true);
         
-        console.log('✅ All newsletters sent');
-        break;
-        
-      default:
-        throw new Error(`Unknown job type: ${jobType}`);
-    }
+        console.log('✅ All newsletters sent successfully');
+      } catch (error) {
+        console.error('❌ Newsletter generation failed:', error.message);
+        throw error; // Re-throw to trigger job failure handling
+      }
+      break;
+      
+    default:
+      throw new Error(`Unknown job type: ${jobType}`);
   }
+}
 
   // Mark job as complete for dependency tracking
   markJobComplete(jobType) {

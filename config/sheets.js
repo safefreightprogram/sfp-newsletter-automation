@@ -16,7 +16,7 @@ async initialize() {
   try {
     console.log('📊 Connecting to Google Sheets...');
     
-    // Use environment variables instead of file for Railway
+    // Use environment variables for Railway
     const credentials = {
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
       private_key: process.env.GOOGLE_PRIVATE_KEY ? 
@@ -25,7 +25,7 @@ async initialize() {
     
     // Validate credentials
     if (!credentials.client_email || !credentials.private_key) {
-      throw new Error('Missing Google Sheets credentials in environment variables. Please set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY');
+      throw new Error('Missing Google Sheets credentials. Set GOOGLE_CLIENT_EMAIL and GOOGLE_PRIVATE_KEY');
     }
     
     // Create JWT auth
@@ -38,29 +38,29 @@ async initialize() {
       ],
     });
 
-    // Use spreadsheet ID from config or environment
+    // Use spreadsheet ID from environment (Railway priority)
     const spreadsheetId = process.env.GOOGLE_SHEETS_ID || this.spreadsheetId;
     if (!spreadsheetId) {
-      throw new Error('Missing GOOGLE_SHEETS_ID in environment variables');
+      throw new Error('Missing GOOGLE_SHEETS_ID environment variable');
     }
 
-    // Initialize document
-    // Initialize document & authenticate
-this.doc = new GoogleSpreadsheet(spreadsheetId);
-await serviceAccountAuth.authorize();                 // ensure JWT is authorized
-await this.doc.useOAuth2Client(serviceAccountAuth);   // attach authorized client
-await this.doc.loadInfo();
-
+    // Initialize document with proper auth
+    this.doc = new GoogleSpreadsheet(spreadsheetId, serviceAccountAuth);
+    await this.doc.loadInfo();
     
     console.log(`✅ Connected to: ${this.doc.title}`);
     
-    // Get the Article_Archive sheet
+    // Get or create Article_Archive sheet
     this.contentSheet = this.doc.sheetsByTitle['Article_Archive'];
     if (!this.contentSheet) {
       console.log('📄 Creating Article_Archive sheet...');
       this.contentSheet = await this.doc.addSheet({
         title: 'Article_Archive',
-        headerValues: ['ID', 'Date_Collected', 'Source', 'Title', 'URL', 'Published_Date', 'Summary', 'Used_In_Issue', 'Content_Hash', 'Relevance_Score', 'Segment_Tag']
+        headerValues: [
+          'ID', 'Date_Collected', 'Source', 'Title', 'URL', 
+          'Published_Date', 'Summary', 'Used_In_Issue', 'Content_Hash', 
+          'Relevance_Score', 'Segment_Tag'
+        ]
       });
     }
     
@@ -70,9 +70,9 @@ await this.doc.loadInfo();
     return true;
   } catch (error) {
     console.error('❌ Failed to connect to Google Sheets:', error.message);
-    return false;
+    throw error; // Re-throw for proper error handling
   }
-}      
+}   
      
   async getExistingHashes() {
     try {
@@ -109,7 +109,7 @@ await this.doc.loadInfo();
           Source: article.source,
           Title: article.title,
           URL: article.url,
-          Published_Date: article.publishedDate.toISOString(),
+          Published_Date: (article.publishedDate ? new Date(article.publishedDate) : new Date()).toISOString(),
           Summary: article.summary,
           Used_In_Issue: '',
           Content_Hash: hash,

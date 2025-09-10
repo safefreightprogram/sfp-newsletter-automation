@@ -16,6 +16,33 @@ const PORT = process.env.PORT || 3000;
 
 const { AdvancedScheduler, setupAdvancedSchedulingEndpoints } = require('./advancedScheduler');
 
+// Railway Environment Validation
+function validateEnvironment() {
+  const required = [
+    'GOOGLE_CLIENT_EMAIL',
+    'GOOGLE_PRIVATE_KEY', 
+    'GOOGLE_SHEETS_ID',
+    'OPENAI_API_KEY'
+  ];
+  
+  const missing = required.filter(env => !process.env[env]);
+  
+  if (missing.length > 0) {
+    console.error('❌ Missing required environment variables:', missing.join(', '));
+    console.log('🔧 Set these in Railway dashboard under Variables');
+    return false;
+  }
+  
+  console.log('✅ All required environment variables present');
+  return true;
+}
+
+// Validate on startup
+if (process.env.NODE_ENV === 'production' && !validateEnvironment()) {
+  console.error('🚫 Production startup failed due to missing environment variables');
+  process.exit(1);
+}
+
 // Initialize email sender
 const emailSender = new EmailSender();
 
@@ -79,29 +106,44 @@ app.get('/', (req, res) => {
   });
 });
 
-// ENHANCED: Manual scraping with better feedback
 app.post('/api/scrape', async (req, res) => {
   try {
     console.log('📡 Manual scrape triggered');
     const startTime = Date.now();
     
     const results = await scrapeAllSources();
-const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
-// Fix: Use results.articles instead of results
-const articles = results.articles || [];
+    // Fix: Use results.articles instead of results
+    const articles = results.articles || [];
 
-res.json({ 
-  success: true, 
-  message: 'Scraping completed successfully',
-  results: {
-    articlesFound: articles.length,
-    duration: `${duration} seconds`,
-    highQuality: articles.filter(a => a.relevanceScore > 10).length,
-    mediumQuality: articles.filter(a => a.relevanceScore >= 5 && a.relevanceScore <= 10).length,
-    timestamp: new Date().toISOString()
-  }
-});
+    // NEW: Save articles to Google Sheets
+    let savedCount = 0;
+    if (articles.length > 0) {
+      try {
+        const SheetsManager = require('../config/sheets');
+        const sheetsManager = new SheetsManager();
+        await sheetsManager.initialize();
+        const savedArticles = await sheetsManager.saveArticles(articles);
+        savedCount = savedArticles.length;
+        console.log(`💾 Saved ${savedCount} new articles to Google Sheets`);
+      } catch (sheetsError) {
+        console.error('⚠️ Failed to save to sheets:', sheetsError.message);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Scraping completed successfully',
+      results: {
+        articlesFound: articles.length,
+        savedToSheets: savedCount,
+        duration: `${duration} seconds`,
+        highQuality: articles.filter(a => a.relevanceScore > 10).length,
+        mediumQuality: articles.filter(a => a.relevanceScore >= 5 && a.relevanceScore <= 10).length,
+        timestamp: new Date().toISOString()
+      }
+    });
   } catch (error) {
     console.error('❌ Scraping failed:', error);
     res.status(500).json({ 
@@ -1485,13 +1527,244 @@ app.get('/', (req, res) => {
   });
 });
 
+// ========================================
+// NEW: SEPARATED NEWSLETTER WORKFLOW API ENDPOINTS
+// ========================================
+
+// Cache for storing generated newsletters before sending
+let newsletterCache = new Map();
+
+// Step 1: Generate newsletter preview (without sending or marking articles as used)
+app.post('/api/newsletter/generate/:segment', async (req, res) => {
+  try {
+    const segment = req.params.segment;
+    
+    if (!['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid segment. Must be "pro" or "driver"'
+      });
+    }
+    
+    console.log(`📧 Generating newsletter preview for ${segment} segment (no sending, no article marking)`);
+    
+    const newsletterGenerator = new NewsletterGenerator();
+    
+    // Generate newsletter WITHOUT sending (sendEmail = false)
+    const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
+    
+    // Create unique newsletter ID for this preview
+    const newsletterId = `NL_${segment}_${Date.now()}`;
+    
+    // Cache the newsletter data for later sending
+    newsletterCache.set(newsletterId, {
+      newsletter: newsletter,
+      segment: segment,
+      generatedAt: new Date().toISOString(),
+      articles: newsletter.articles || []
+    });
+    
+    // Clean old cache entries (keep only last 10)
+    if (newsletterCache.size > 10) {
+      const oldestKey = newsletterCache.keys().next().value;
+      newsletterCache.delete(oldestKey);
+    }
+    
+    res.json({
+      success: true,
+      message: `${segment} newsletter preview generated (articles NOT marked as used)`,
+      data: {
+        newsletterId: newsletterId,
+        segment: segment,
+        subject: newsletter.subject,
+        articlesCount: newsletter.articles?.length || 0,
+        previewHtml: newsletter.html,
+        generatedAt: new Date().toISOString()
+      }
+    });
+    
+    console.log(`✅ Newsletter preview generated: ${newsletterId} with ${newsletter.articles?.length || 0} articles`);
+    
+  } catch (error) {
+    console.error('❌ Newsletter preview generation failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Step 2: Send newsletter from cache (this is when articles get marked as used)
+app.post('/api/newsletter/send/:newsletterId', async (req, res) => {
+  try {
+    const newsletterId = req.params.newsletterId;
+    const { testEmail, confirmSend } = req.body;
+    
+    // Get cached newsletter
+    const cachedData = newsletterCache.get(newsletterId);
+    if (!cachedData) {
+      return res.status(404).json({
+        success: false,
+        error: 'Newsletter not found. Please generate preview first.'
+      });
+    }
+    
+    const { newsletter, segment, articles } = cachedData;
+    
+    if (testEmail) {
+      // Send test email only (don't mark articles as used)
+      console.log(`📧 Sending test email for ${newsletterId} to ${testEmail}`);
+      
+      const testSubscriber = { 
+        email: testEmail, 
+        name: 'Test User',
+        segment: segment
+      };
+      
+      await emailSender.sendSingleEmail(newsletter, testSubscriber);
+      
+      res.json({
+        success: true,
+        message: 'Test email sent successfully',
+        data: {
+          newsletterId: newsletterId,
+          testEmail: testEmail,
+          segment: segment
+        }
+      });
+      
+    } else if (confirmSend) {
+      // Send to all subscribers AND mark articles as used
+      console.log(`📤 Sending newsletter ${newsletterId} to all ${segment} subscribers and marking articles as used`);
+      
+      // Send to all subscribers
+      const subscribers = await emailSender.getSubscribersFromSheet(segment);
+      const emailResults = await emailSender.sendBulkEmails(newsletter, subscribers);
+      
+      // NOW mark articles as used (only when actually sent to subscribers)
+      await markArticlesAsUsed(articles, segment, newsletterId);
+      
+      // Remove from cache after successful send
+      newsletterCache.delete(newsletterId);
+      
+      res.json({
+        success: true,
+        message: `Newsletter sent to all ${segment} subscribers and articles marked as used`,
+        data: {
+          newsletterId: newsletterId,
+          segment: segment,
+          emailResults: emailResults,
+          articlesMarkedAsUsed: articles.length
+        }
+      });
+      
+      console.log(`✅ Newsletter ${newsletterId} sent and articles marked as used`);
+      
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'Must specify either testEmail or confirmSend=true'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Newsletter sending failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Helper function: Mark articles as used in Google Sheets
+async function markArticlesAsUsed(articles, segment, newsletterId) {
+  if (!articles || articles.length === 0) {
+    console.log('No articles to mark as used');
+    return;
+  }
+  
+  try {
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    // Get all data from Article_Archive sheet
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Article_Archive!A:Z',
+    });
+    
+    const rows = response.data.values;
+    if (!rows || rows.length < 2) {
+      console.log('No articles found in Article_Archive sheet');
+      return;
+    }
+    
+    // Find column indices
+    const headers = rows[0];
+    const urlColumnIndex = headers.findIndex(h => h === 'URL');
+    const usedColumnIndex = headers.findIndex(h => h === 'Used_In_Issue');
+    
+    if (urlColumnIndex === -1 || usedColumnIndex === -1) {
+      throw new Error('Required columns (URL, Used_In_Issue) not found in Article_Archive sheet');
+    }
+    
+// Create a map of URLs from the articles
+const articleUrls = new Set(articles.map(article => article.url || article.link));
+
+// Find matching rows and prepare updates
+const updates = [];
+const timestamp = new Date().toISOString();
+
+for (let i = 1; i < rows.length; i++) {
+  const row = rows[i];
+  const articleUrl = row[urlColumnIndex];
+  
+  if (articleUrls.has(articleUrl) && !row[usedColumnIndex]) {
+    // Mark this article as used
+    const usageMarker = `${segment}-${newsletterId}_${timestamp}`;
+    
+    updates.push({
+      range: `Article_Archive!${String.fromCharCode(65 + usedColumnIndex)}${i + 1}`,
+      values: [[usageMarker]]
+    });
+  }
+}
+
+// Apply all updates
+if (updates.length > 0) {
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+    requestBody: {
+      valueInputOption: 'RAW',
+      data: updates
+    }
+  });
+  
+  console.log(`✅ Marked ${updates.length} articles as used in Article_Archive sheet`);
+} else {
+  console.log('No matching articles found to mark as used');
+}
+
+} catch (error) {
+console.error('❌ Failed to mark articles as used:', error);
+// Don't throw error - we don't want to fail the email sending if article marking fails
+}
+}
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  process.exit(0);
+console.log('SIGTERM received, shutting down gracefully');
+process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  process.exit(0);
+console.log('SIGINT received, shutting down gracefully');
+process.exit(0);
 });
