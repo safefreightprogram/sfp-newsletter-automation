@@ -2,122 +2,90 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const cron = require('node-cron');
 const path = require('path');
 const { google } = require('googleapis');
-
-// Import your modules
-const NewsletterGenerator = require('./generator');        
-const { scrapeAllSources } = require('./scraper');          
+const NewsletterGenerator = require('./generator');
+const { scrapeAllSources } = require('./scraper');
 const EmailSender = require('./emailSender');
+const { AdvancedScheduler, setupAdvancedSchedulingEndpoints } = require('./advancedScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const { AdvancedScheduler, setupAdvancedSchedulingEndpoints } = require('./advancedScheduler');
-
-// Railway Environment Validation
+// --- ENVIRONMENT VALIDATION ---
 function validateEnvironment() {
   const required = [
     'GOOGLE_CLIENT_EMAIL',
-    'GOOGLE_PRIVATE_KEY', 
+    'GOOGLE_PRIVATE_KEY',
     'GOOGLE_SHEETS_ID',
     'OPENAI_API_KEY'
   ];
-  
   const missing = required.filter(env => !process.env[env]);
-  
   if (missing.length > 0) {
     console.error('❌ Missing required environment variables:', missing.join(', '));
     console.log('🔧 Set these in Railway dashboard under Variables');
     return false;
   }
-  
   console.log('✅ All required environment variables present');
   return true;
 }
 
-// Validate on startup
 if (process.env.NODE_ENV === 'production' && !validateEnvironment()) {
   console.error('🚫 Production startup failed due to missing environment variables');
   process.exit(1);
 }
 
-// Initialize email sender
-const emailSender = new EmailSender();
-
-// Middleware
+// --- MIDDLEWARE ---
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('public'));
 
-// Health check endpoint for Railway
+// --- GLOBALS ---
+const emailSender = new EmailSender();
+let newsletterCache = new Map();
+
+// --- HEALTH CHECK ---
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
+  res.status(200).json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     service: 'SFP Newsletter Automation',
     version: '2.0.0'
   });
 });
 
-// Root endpoint with better documentation
+// --- ROOT DOCS ---
 app.get('/', (req, res) => {
   res.json({
-    message: 'SFP Newsletter Automation API v2.0',
-    schedule: {
-      scraping: '4:45 PM AEST daily',
-      newsletter: '5:00 PM AEST daily'
-    },
-    endpoints: {
-      // Core functionality
-      health: 'GET /health',
-      status: 'GET /api/status',
-      
-      // Content management
-      scrape: 'POST /api/scrape',
-      
-      // Newsletter generation
-      'generate-pro': 'POST /api/generate/pro',
-      'generate-driver': 'POST /api/generate/driver',
-      'generate-both': 'POST /api/generate/both',
-      
-      // Email testing
-      'test-email': 'POST /api/test-email',
-      'test-subscribers': 'GET /api/test-subscribers',
-      'email-status': 'GET /api/email-status',
-      
-      // Subscriber management
-      'subscribers-pro': 'GET /api/subscribers/pro',
-      'subscribers-driver': 'GET /api/subscribers/driver',
-      'subscribers-all': 'GET /api/subscribers',
-      'subscriber-stats': 'GET /api/subscriber-stats',
-      'add-subscriber': 'POST /api/subscribers',
-      'update-subscriber': 'PUT /api/subscribers/:email',
-      'remove-subscriber': 'DELETE /api/subscribers/:email',
-      
-      // Newsletter management
-      'newsletter-history': 'GET /api/newsletters',
-      'newsletter-detail': 'GET /api/newsletters/:id',
-      'newsletter-metrics': 'GET /api/metrics'
-    }
+    message: 'SFP Newsletter Automation API',
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      'GET /health',
+      'POST /api/scrape',
+      'POST /api/newsletter/generate/:segment',
+      'POST /api/newsletter/send/:newsletterId',
+      'GET /api/subscribers',
+      'POST /api/subscribers',
+      'PUT /api/subscribers/:email',
+      'DELETE /api/subscribers/:email',
+      'GET /api/status',
+      'GET /api/email-status',
+      'GET /api/schedule/advanced',
+      'PUT /api/schedule/:jobType',
+      'POST /api/schedule/trigger/:jobType'
+    ]
   });
 });
 
+// --- SCRAPING (Manual) ---
 app.post('/api/scrape', async (req, res) => {
   try {
-    console.log('📡 Manual scrape triggered');
     const startTime = Date.now();
-    
     const results = await scrapeAllSources();
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-
-    // Fix: Use results.articles instead of results
     const articles = results.articles || [];
-
-    // NEW: Save articles to Google Sheets
     let savedCount = 0;
     if (articles.length > 0) {
       try {
@@ -126,660 +94,97 @@ app.post('/api/scrape', async (req, res) => {
         await sheetsManager.initialize();
         const savedArticles = await sheetsManager.saveArticles(articles);
         savedCount = savedArticles.length;
-        console.log(`💾 Saved ${savedCount} new articles to Google Sheets`);
       } catch (sheetsError) {
         console.error('⚠️ Failed to save to sheets:', sheetsError.message);
       }
     }
-
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Scraping completed successfully',
       results: {
         articlesFound: articles.length,
         savedToSheets: savedCount,
-        duration: `${duration} seconds`,
-        highQuality: articles.filter(a => a.relevanceScore > 10).length,
-        mediumQuality: articles.filter(a => a.relevanceScore >= 5 && a.relevanceScore <= 10).length,
+        duration: `${((Date.now() - startTime) / 1000).toFixed(1)} seconds`,
         timestamp: new Date().toISOString()
       }
     });
   } catch (error) {
-    console.error('❌ Scraping failed:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// ENHANCED: Newsletter generation with better options
-app.post('/api/generate/:segment?', async (req, res) => {
-  try {
-    const segment = req.params.segment || 'pro';
-    const { sendEmail = true, dryRun = false } = req.body;
-    
-    if (!['pro', 'driver', 'both'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid segment. Must be "pro", "driver", or "both"'
-      });
-    }
-    
-    console.log(`📧 Newsletter generation triggered for ${segment} segment (sendEmail: ${sendEmail}, dryRun: ${dryRun})`);
-    
-    const newsletterGenerator = new NewsletterGenerator();
-    const results = {};
-    
-    if (segment === 'both') {
-      // Generate both newsletters
-      console.log('📊 Generating both newsletters...');
-      
-      try {
-        results.pro = await newsletterGenerator.generateNewsletter('pro', sendEmail && !dryRun);
-        console.log('✅ Pro newsletter completed');
-        
-        // Wait between newsletters
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
-        results.driver = await newsletterGenerator.generateNewsletter('driver', sendEmail && !dryRun);
-        console.log('✅ Driver newsletter completed');
-        
-      } catch (error) {
-        console.error('❌ Newsletter generation failed:', error);
-        return res.status(500).json({
-          success: false,
-          error: error.message,
-          partialResults: results
-        });
-      }
-      
-    } else {
-      // Generate single newsletter
-      results[segment] = await newsletterGenerator.generateNewsletter(segment, sendEmail && !dryRun);
-    }
-    
-    res.json({ 
-      success: true, 
-      message: `Newsletter(s) generated successfully`,
-      dryRun: dryRun,
-      results: results,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Newsletter generation failed:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// NEW: Enhanced subscriber management endpoints
-
-// Get all subscribers or by segment
-app.get('/api/subscribers/:segment?', async (req, res) => {
+// --- NEWSLETTER PREVIEW (cache, never marks as used) ---
+app.post('/api/newsletter/generate/:segment', async (req, res) => {
   try {
     const segment = req.params.segment;
-    const { includeInactive = false, page = 1, limit = 100 } = req.query;
-    
-    if (segment && !['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid segment. Must be "pro" or "driver"'
-      });
-    }
-    
-    let subscribers;
-    
-    if (segment) {
-      subscribers = await emailSender.getSubscribersFromSheet(segment);
-      
-      // Add pagination
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + parseInt(limit);
-      const paginatedSubscribers = subscribers.slice(startIndex, endIndex);
-      
-      res.json({
-        success: true,
-        segment: segment,
-        data: {
-          subscribers: paginatedSubscribers.map(s => ({
-            email: s.email,
-            name: s.name,
-            status: s.status,
-            subscribedDate: s.subscribedDate
-          })),
-          pagination: {
-            page: parseInt(page),
-            limit: parseInt(limit),
-            total: subscribers.length,
-            pages: Math.ceil(subscribers.length / limit)
-          }
-        }
-      });
-    } else {
-      // Get both segments
-      const [proSubscribers, driverSubscribers] = await Promise.all([
-        emailSender.getSubscribersFromSheet('pro'),
-        emailSender.getSubscribersFromSheet('driver')
-      ]);
-      
-      res.json({
-        success: true,
-        data: {
-          pro: {
-            count: proSubscribers.length,
-            subscribers: proSubscribers.slice(0, 10).map(s => ({ email: s.email, name: s.name, status: s.status }))
-          },
-          driver: {
-            count: driverSubscribers.length,
-            subscribers: driverSubscribers.slice(0, 10).map(s => ({ email: s.email, name: s.name, status: s.status }))
-          },
-          summary: {
-            totalActive: proSubscribers.length + driverSubscribers.length,
-            proActive: proSubscribers.length,
-            driverActive: driverSubscribers.length
-          }
-        }
-      });
-    }
-  } catch (error) {
-    console.error('❌ Subscriber fetch failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// NEW: Enhanced subscriber statistics
-app.get('/api/subscriber-stats', async (req, res) => {
-  try {
-    console.log('📊 Fetching enhanced subscriber statistics...');
-    
-    const [proSubscribers, driverSubscribers] = await Promise.all([
-      emailSender.getSubscribersFromSheet('pro'),
-      emailSender.getSubscribersFromSheet('driver')
-    ]);
-    
-    // Analyze subscriber data
-    const analyzeSubscribers = (subscribers, segment) => {
-      const companies = new Set();
-      const domains = new Map();
-      
-      subscribers.forEach(sub => {
-        if (sub.company) companies.add(sub.company);
-        
-        const domain = sub.email.split('@')[1];
-        domains.set(domain, (domains.get(domain) || 0) + 1);
-      });
-      
-      return {
-        count: subscribers.length,
-        topDomains: Array.from(domains.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([domain, count]) => ({ domain, count })),
-        companies: Array.from(companies).slice(0, 10),
-        segment
-      };
-    };
-    
-    const proStats = analyzeSubscribers(proSubscribers, 'pro');
-    const driverStats = analyzeSubscribers(driverSubscribers, 'driver');
-    
-    res.json({
-      success: true,
-      data: {
-        summary: {
-          totalSubscribers: proStats.count + driverStats.count,
-          proSubscribers: proStats.count,
-          driverSubscribers: driverStats.count,
-          lastUpdated: new Date().toISOString()
-        },
-        pro: proStats,
-        driver: driverStats,
-        growth: {
-          // Placeholder for growth metrics
-          weeklyGrowth: 0,
-          monthlyGrowth: 0,
-          note: 'Growth tracking requires historical data'
-        }
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Subscriber stats failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Enhanced test email with more options
-app.post('/api/test-email', async (req, res) => {
-  try {
-    const { email, type = 'simple', segment = 'pro' } = req.body;
-    const testRecipient = email || process.env.NEWSLETTER_RECIPIENTS?.split(',')[0];
-    
-    if (!testRecipient) {
-      return res.status(400).json({
-        success: false,
-        error: 'No test recipient provided. Include email in request body or set NEWSLETTER_RECIPIENTS env var.'
-      });
-    }
-
-    console.log(`📧 Sending ${type} test email to: ${testRecipient}`);
-    
-    let testData;
-    
-    if (type === 'newsletter') {
-      // Send a sample newsletter
-      const newsletterGenerator = new NewsletterGenerator();
-      try {
-        const sampleNewsletter = await newsletterGenerator.generateNewsletter(segment, false);
-        testData = sampleNewsletter;
-      } catch (error) {
-        // Fallback to simple test if newsletter generation fails
-        testData = {
-          html: `<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #1e40af;">SFP Newsletter Test (Newsletter Generation Failed)</h2>
-            <p>This is a fallback test email. Newsletter generation failed with error: ${error.message}</p>
-            <p><strong>Test Time:</strong> ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
-            </body></html>`,
-          text: 'SFP Newsletter Test - Newsletter generation failed',
-          subject: `SFP Newsletter Test - ${segment} (Generation Failed)`,
-          segment: segment
-        };
-      }
-    } else {
-      // Simple connectivity test
-      testData = {
-        html: `
-          <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #1e40af;">SFP Newsletter System Test</h2>
-            <p>This is a test email from the Safe Freight Program newsletter automation system.</p>
-            <p><strong>Test Time:</strong> ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
-            <p><strong>System Status:</strong> Email sending functionality is working correctly</p>
-            <p><strong>Subscriber System:</strong> Connected to Google Sheets</p>
-            <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
-            <p><strong>Server:</strong> Railway Production</p>
-          </body></html>
-        `,
-        text: 'SFP Newsletter System Test - Email sending working correctly',
-        subject: 'SFP Newsletter System Test',
-        segment: 'test'
-      };
-    }
-    
-    const testSubscriber = { 
-      email: testRecipient, 
-      name: 'Test User',
-      segment: testData.segment || 'test'
-    };
-    
-    await emailSender.sendSingleEmail(testData, testSubscriber);
-    
-    res.json({
-      success: true,
-      message: `${type} test email sent successfully`,
-      data: {
-        recipient: testRecipient,
-        type: type,
-        segment: testData.segment,
-        timestamp: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    console.error('❌ Test email failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      details: {
-        smtpHost: process.env.EMAIL_HOST,
-        fromEmail: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-        timestamp: new Date().toISOString()
-      }
-    });
-  }
-});
-
-// Enhanced test subscriber system
-app.get('/api/test-subscribers', async (req, res) => {
-  try {
-    console.log('🧪 Testing subscriber system...');
-    
-    const testResult = await emailSender.testEmailSystem();
-    
-    res.json({
-      success: true,
-      message: 'Subscriber system test completed',
-      results: {
-        ...testResult,
-        sheetsUrl: 'https://docs.google.com/spreadsheets/d/' + process.env.GOOGLE_SHEETS_ID,
-        timestamp: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    console.error('❌ Subscriber test failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Enhanced email configuration status
-app.get('/api/email-status', async (req, res) => {
-  try {
-    const connectionVerified = await emailSender.verifyConnection();
-    
-    res.json({
-      success: true,
-      configuration: {
-        emailConfigured: !!process.env.EMAIL_USER,
-        recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS,
-        connectionVerified: connectionVerified,
-        smtpHost: process.env.EMAIL_HOST || 'smtp.gmail.com',
-        smtpPort: process.env.EMAIL_PORT || 587,
-        fromAddress: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'Not configured',
-        environment: process.env.NODE_ENV || 'development'
-      },
-      issues: identifyEmailIssues(),
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      configuration: {
-        emailConfigured: !!process.env.EMAIL_USER,
-        recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS,
-        connectionVerified: false
-      },
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Helper function to identify email configuration issues
-function identifyEmailIssues() {
-  const issues = [];
-  
-  if (!process.env.EMAIL_USER) {
-    issues.push('EMAIL_USER not configured');
-  }
-  
-  if (!process.env.EMAIL_PASS) {
-    issues.push('EMAIL_PASS not configured');
-  }
-  
-  if (process.env.EMAIL_FROM && !process.env.EMAIL_FROM.includes('@')) {
-    issues.push('EMAIL_FROM should be an email address, not a domain');
-  }
-  
-  if (!process.env.NEWSLETTER_RECIPIENTS) {
-    issues.push('NEWSLETTER_RECIPIENTS not configured for fallback');
-  }
-  
-  // Check if using Gmail with regular password instead of App Password
-  if (process.env.EMAIL_HOST === 'smtp.gmail.com' && process.env.EMAIL_PASS && !process.env.EMAIL_PASS.includes(' ')) {
-    issues.push('Consider using Gmail App Password instead of regular password');
-  }
-  
-  return issues;
-}
-// Debug endpoint to test Google Sheets connection
-app.get('/api/debug/sheets-raw', async (req, res) => {
-  try {
-    const auth = await google.auth.getClient({
-  credentials: {
-    client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-  },
-  scopes: ['https://www.googleapis.com/auth/spreadsheets']
-});
-    
-    const sheets = google.sheets({ version: 'v4', auth });
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
-      range: 'Subscribers!A1:P10',
-    });
-    
-    res.json({
-      success: true,
-      rawData: response.data.values,
-      rowCount: response.data.values?.length || 0
-    });
-  } catch (error) {
-    res.json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-// Enhanced system status
-app.get('/api/status', async (req, res) => {
-  try {
-    const emailStatus = await emailSender.verifyConnection();
-    const subscriberTest = await emailSender.testEmailSystem();
-    
-    res.json({
-      status: 'running',
-      version: '2.0.0',
-      uptime: process.uptime(),
-      environment: process.env.NODE_ENV || 'development',
-      lastRestart: new Date().toISOString(),
-      services: {
-        email: {
-          configured: !!process.env.EMAIL_USER,
-          connected: emailStatus,
-          subscribers: subscriberTest.totalSubscribers || 0
-        },
-        sheets: {
-          configured: !!process.env.GOOGLE_SHEETS_ID,
-          connected: subscriberTest.smtpWorking
-        },
-        openai: {
-          configured: !!process.env.OPENAI_API_KEY
-        }
-      },
-      schedule: {
-        active: process.env.NODE_ENV === 'production',
-        scraping: '4:45 PM AEST daily',
-        newsletter: '5:00 PM AEST daily'
-      },
-      currentTime: new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }),
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// NEW: Newsletter history endpoint
-app.get('/api/newsletters', async (req, res) => {
-  try {
-    const { segment, limit = 10, page = 1 } = req.query;
-    
-    // This would require implementing newsletter archive retrieval
-    // For now, return placeholder data
-    res.json({
-      success: true,
-      message: 'Newsletter history endpoint - implementation pending',
-      data: {
-        newsletters: [],
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total: 0,
-          pages: 0
-        },
-        note: 'Requires Content_Archive sheet integration'
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// NEW: Newsletter metrics endpoint
-app.get('/api/metrics', async (req, res) => {
-  try {
-    const { timeframe = '30d' } = req.query;
-    
-    // Placeholder for newsletter metrics
-    res.json({
-      success: true,
-      message: 'Newsletter metrics endpoint - implementation pending',
-      data: {
-        timeframe: timeframe,
-        metrics: {
-          newslettersSent: 0,
-          totalOpens: 0,
-          totalClicks: 0,
-          openRate: 0,
-          clickRate: 0,
-          unsubscribeRate: 0
-        },
-        note: 'Requires analytics integration'
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Unsubscribe endpoint with better handling
-app.get('/unsubscribe', async (req, res) => {
-  const { email, token } = req.query;
-  
-  if (!email) {
-    return res.status(400).send(`
-      <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #dc2626;">Error</h2>
-        <p>Email parameter is required for unsubscribe.</p>
-      </body></html>
-    `);
-  }
-  
-  try {
-    res.send(`
-      <html>
-        <head><title>Unsubscribed - Safe Freight Program</title></head>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #16a34a;">Successfully Unsubscribed</h2>
-          <p>You have been removed from the Safe Freight Program newsletter.</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p>If this was a mistake, you can resubscribe at <a href="https://safefreightprogram.com">safefreightprogram.com</a></p>
-          <hr style="margin: 20px 0;">
-          <p style="color: #6b7280; font-size: 14px;">
-            Note: This is a manual unsubscribe confirmation. 
-            Please contact support if you continue to receive emails.
-          </p>
-        </body>
-      </html>
-    `);
-  } catch (error) {
-    console.error('Unsubscribe error:', error);
-    res.status(500).send(`
-      <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #dc2626;">Error</h2>
-        <p>Error processing unsubscribe request. Please contact support.</p>
-      </body></html>
-    `);
-  }
-});
-
-let scheduler;
-
-if (process.env.NODE_ENV === 'production') {
-  console.log('🕐 Production mode: Advanced scheduling enabled');
-  
-  // Initialize advanced scheduler
-  scheduler = new AdvancedScheduler();
-  scheduler.initialize();
-  
-  // Setup API endpoints for schedule management
-  setupAdvancedSchedulingEndpoints(app, scheduler);
-  
-} else {
-  console.log('🔧 Development mode: Manual testing only');
-  
-  // Create dummy scheduler for development API endpoints
-  scheduler = {
-    getConfiguration: () => ({
-      schedules: {
-        scraping: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 16, minute: 45 },
-        newsletter: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 17, minute: 30 }
-      },
-      nextRuns: { scraping: 'Dev mode - disabled', newsletter: 'Dev mode - disabled' },
-      activeJobs: [],
-      dependencies: {}
-    }),
-    updateSchedule: () => { throw new Error('Scheduling not available in development mode'); },
-    triggerJob: async (jobType) => {
-      console.log(`🔧 Dev mode manual trigger: ${jobType}`);
-      // You can still manually trigger jobs in dev mode
-    }
-  };
-  
-  setupAdvancedSchedulingEndpoints(app, scheduler);
-}
-
-
-// Add these new endpoints to your existing index.js file
-// Insert after your existing routes but before the error handling middleware
-
-// ========================================
-// SUBSCRIBER MANAGEMENT ENDPOINTS
-// ========================================
-
-// Add new subscriber (append to sheet)
-app.post('/api/subscribers', async (req, res) => {
-  try {
-    const { email, name, segment, company, role, status = 'active' } = req.body;
-    
-    if (!email || !segment) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and segment are required'
-      });
-    }
-    
     if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Segment must be "pro" or "driver"'
-      });
+      return res.status(400).json({ success: false, error: 'Invalid segment. Must be "pro" or "driver"' });
     }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid email format'
-      });
+    const newsletterGenerator = new NewsletterGenerator();
+    const newsletter = await newsletterGenerator.generateNewsletter(segment, false); // false = do not send
+    const newsletterId = `NL_${segment}_${Date.now()}`;
+    newsletterCache.set(newsletterId, {
+      newsletter,
+      segment,
+      generatedAt: new Date().toISOString(),
+      articles: newsletter.articles || []
+    });
+    if (newsletterCache.size > 10) {
+      const oldestKey = newsletterCache.keys().next().value;
+      newsletterCache.delete(oldestKey);
     }
-    
-    console.log(`Adding new subscriber: ${email} (${segment})`);
-    
+    res.json({
+      success: true,
+      data: {
+        newsletterId,
+        segment,
+        subject: newsletter.subject,
+        articlesCount: newsletter.articles?.length || 0,
+        previewHtml: newsletter.html,
+        generatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// --- NEWSLETTER SEND (only marks as used on real send) ---
+app.post('/api/newsletter/send/:newsletterId', async (req, res) => {
+  try {
+    const newsletterId = req.params.newsletterId;
+    const { testEmail, confirmSend } = req.body;
+    const cachedData = newsletterCache.get(newsletterId);
+    if (!cachedData) {
+      return res.status(404).json({ success: false, error: 'Newsletter not found. Please generate preview first.' });
+    }
+    const { newsletter, segment, articles } = cachedData;
+    if (testEmail) {
+      const testSubscriber = { email: testEmail, name: 'Test User', segment };
+      await emailSender.sendSingleEmail(newsletter, testSubscriber);
+      return res.json({ success: true, message: 'Test email sent successfully', data: { newsletterId, testEmail, segment } });
+    }
+    if (confirmSend) {
+      const subscribers = await emailSender.getSubscribersFromSheet(segment);
+      await emailSender.sendBulkEmails(newsletter, subscribers);
+      await markArticlesAsUsed(articles, segment, newsletterId);
+      newsletterCache.delete(newsletterId);
+      return res.json({ success: true, message: 'Newsletter sent and articles marked as used', data: { newsletterId, segment, recipients: subscribers.length } });
+    }
+    return res.status(400).json({ success: false, error: 'Must specify either testEmail or confirmSend=true' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// --- MARK ARTICLES AS USED ---
+async function markArticlesAsUsed(articles, segment, newsletterId) {
+  if (!articles || articles.length === 0) return;
+  try {
     const auth = await google.auth.getClient({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -787,103 +192,134 @@ app.post('/api/subscribers', async (req, res) => {
       },
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
-    
     const sheets = google.sheets({ version: 'v4', auth });
-    
-    // Check if subscriber already exists
-    const existingCheck = await sheets.spreadsheets.values.get({
-      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
-      range: 'Subscribers!A:P',
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Article_Archive!A:Z',
     });
-    
-    const existingRows = existingCheck.data.values || [];
-    for (let i = 1; i < existingRows.length; i++) {
-      if (existingRows[i][1] && existingRows[i][1].toLowerCase() === email.toLowerCase()) {
-        return res.status(409).json({
-          success: false,
-          error: 'Subscriber already exists'
+    const rows = response.data.values;
+    if (!rows || rows.length < 2) return;
+    const headers = rows[0];
+    const urlCol = headers.findIndex(h => h === 'URL');
+    const usedCol = headers.findIndex(h => h === 'Used_In_Issue');
+    if (urlCol === -1 || usedCol === -1) return;
+    const articleUrls = new Set(articles.map(a => a.url || a.link));
+    const updates = [];
+    const timestamp = new Date().toISOString();
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const articleUrl = row[urlCol];
+      if (articleUrls.has(articleUrl) && !row[usedCol]) {
+        const usageMarker = `${segment}-${newsletterId}_${timestamp}`;
+        updates.push({
+          range: `Article_Archive!${String.fromCharCode(65 + usedCol)}${i + 1}`,
+          values: [[usageMarker]]
         });
       }
     }
-    
-    const subscriberId = `SUB-${Date.now()}`;
-    const timestamp = new Date().toISOString();
-    
-    const newSubscriberData = [
-      subscriberId,
-      email,
-      name || '',
-      segment,
-      status,
-      '',
-      timestamp,
-      '',
-      '',
-      company || '',
-      role || '',
-      '',
-      timestamp,
-      '',
-      '',
-      'weekly'
-    ];
-    
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
-      range: 'Subscribers!A:P',
-      valueInputOption: 'RAW',
-      insertDataOption: 'INSERT_ROWS',
-      requestBody: {
-        values: [newSubscriberData]
-      }
-    });
-    
-    console.log(`Successfully added subscriber ${email}`);
-    
-    res.json({
-      success: true,
-      message: 'Subscriber added successfully',
-      data: {
-        subscriberId,
-        email,
-        name: name || '',
-        segment,
-        status,
-        subscribedAt: timestamp
-      }
-    });
-    
+    if (updates.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+        requestBody: { valueInputOption: 'RAW', data: updates }
+      });
+    }
   } catch (error) {
-    console.error('Add subscriber failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('Failed to mark articles as used:', error);
+  }
+}
+
+// --- SUBSCRIBER MANAGEMENT ---
+app.get('/api/subscribers/:segment?', async (req, res) => {
+  try {
+    const segment = req.params.segment;
+    if (segment && !['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({ success: false, error: 'Invalid segment.' });
+    }
+    if (segment) {
+      const subscribers = await emailSender.getSubscribersFromSheet(segment);
+      return res.json({ success: true, data: { segment, subscribers } });
+    } else {
+      const [pro, driver] = await Promise.all([
+        emailSender.getSubscribersFromSheet('pro'),
+        emailSender.getSubscribersFromSheet('driver')
+      ]);
+      return res.json({
+        success: true,
+        data: {
+          pro: { count: pro.length, subscribers: pro },
+          driver: { count: driver.length, subscribers: driver }
+        }
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Update existing subscriber
+app.post('/api/subscribers', async (req, res) => {
+  try {
+    const { email, name, segment, company, role, status = 'active' } = req.body;
+    if (!email || !segment) {
+      return res.status(400).json({ success: false, error: 'Email and segment are required' });
+    }
+    if (!['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({ success: false, error: 'Segment must be "pro" or "driver"' });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email format' });
+    }
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const existingCheck = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A:P',
+    });
+    const existingRows = existingCheck.data.values || [];
+    for (let i = 1; i < existingRows.length; i++) {
+      if (existingRows[i][1] && existingRows[i][1].toLowerCase() === email.toLowerCase()) {
+        return res.status(409).json({ success: false, error: 'Subscriber already exists' });
+      }
+    }
+    const subscriberId = `SUB-${Date.now()}`;
+    const timestamp = new Date().toISOString();
+    const newSubscriberData = [
+      subscriberId, email, name || '', segment, status, '',
+      timestamp, '', '', company || '', role || '', '', timestamp, '', '', 'weekly'
+    ];
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A:P',
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [newSubscriberData] }
+    });
+    res.json({
+      success: true,
+      message: 'Subscriber added successfully',
+      data: { subscriberId, email, name: name || '', segment, status, subscribedAt: timestamp }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.put('/api/subscribers/:email', async (req, res) => {
   try {
     const targetEmail = req.params.email;
     const { name, segment, company, role, status } = req.body;
-    
-    console.log(`Updating subscriber: ${targetEmail}`);
-    
     if (status && !['active', 'paused', 'unsubscribed'].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Status must be "active", "paused", or "unsubscribed"'
-      });
+      return res.status(400).json({ success: false, error: 'Status must be "active", "paused", or "unsubscribed"' });
     }
-    
     if (segment && !['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Segment must be "pro" or "driver"'
-      });
+      return res.status(400).json({ success: false, error: 'Segment must be "pro" or "driver"' });
     }
-    
     const auth = await google.auth.getClient({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -891,19 +327,14 @@ app.put('/api/subscribers/:email', async (req, res) => {
       },
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
-    
     const sheets = google.sheets({ version: 'v4', auth });
-    
-    // Find the subscriber row
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
       range: 'Subscribers!A:P',
     });
-    
     const rows = response.data.values;
     let targetRowIndex = -1;
     let currentData = null;
-    
     for (let i = 1; i < rows.length; i++) {
       if (rows[i][1] && rows[i][1].toLowerCase() === targetEmail.toLowerCase()) {
         targetRowIndex = i + 1;
@@ -911,15 +342,9 @@ app.put('/api/subscribers/:email', async (req, res) => {
         break;
       }
     }
-    
     if (targetRowIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        error: 'Subscriber not found'
-      });
+      return res.status(404).json({ success: false, error: 'Subscriber not found' });
     }
-    
-    // Prepare update data
     const updateData = [
       currentData[0] || '',
       targetEmail,
@@ -933,23 +358,15 @@ app.put('/api/subscribers/:email', async (req, res) => {
       company || currentData[9] || '',
       role || currentData[10] || '',
       currentData[11] || '',
-      new Date().toISOString(), // Updated_At
-      currentData[13] || '',
-      currentData[14] || '',
-      currentData[15] || ''
+      new Date().toISOString(),
+      currentData[13] || '', currentData[14] || '', currentData[15] || ''
     ];
-    
     await sheets.spreadsheets.values.update({
-      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
       range: `Subscribers!A${targetRowIndex}:P${targetRowIndex}`,
       valueInputOption: 'RAW',
-      requestBody: {
-        values: [updateData]
-      }
+      requestBody: { values: [updateData] }
     });
-    
-    console.log(`Successfully updated subscriber ${targetEmail}`);
-    
     res.json({
       success: true,
       message: 'Subscriber updated successfully',
@@ -963,23 +380,14 @@ app.put('/api/subscribers/:email', async (req, res) => {
         updatedAt: updateData[12]
       }
     });
-    
   } catch (error) {
-    console.error('Update subscriber failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Delete subscriber
 app.delete('/api/subscribers/:email', async (req, res) => {
   try {
     const targetEmail = req.params.email;
-    
-    console.log(`Deleting subscriber: ${targetEmail}`);
-    
     const auth = await google.auth.getClient({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -987,35 +395,24 @@ app.delete('/api/subscribers/:email', async (req, res) => {
       },
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
-    
     const sheets = google.sheets({ version: 'v4', auth });
-    
-    // Find the subscriber row
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
       range: 'Subscribers!A:P',
     });
-    
     const rows = response.data.values;
     let targetRowIndex = -1;
-    
     for (let i = 1; i < rows.length; i++) {
       if (rows[i][1] && rows[i][1].toLowerCase() === targetEmail.toLowerCase()) {
         targetRowIndex = i;
         break;
       }
     }
-    
     if (targetRowIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        error: 'Subscriber not found'
-      });
+      return res.status(404).json({ success: false, error: 'Subscriber not found' });
     }
-    
-    // Delete the row
     await sheets.spreadsheets.batchUpdate({
-      spreadsheetId: '1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM',
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
       requestBody: {
         requests: [{
           deleteDimension: {
@@ -1029,221 +426,21 @@ app.delete('/api/subscribers/:email', async (req, res) => {
         }]
       }
     });
-    
-    console.log(`Successfully deleted subscriber ${targetEmail}`);
-    
     res.json({
       success: true,
       message: 'Subscriber deleted successfully',
       data: { email: targetEmail }
     });
-    
   } catch (error) {
-    console.error('Delete subscriber failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-// ========================================
-// SCHEDULE MANAGEMENT ENDPOINTS  
-// ========================================
-
-// Store schedule in memory (in production, use database or config file)
-let systemSchedule = {
-  scraping: { hour: 16, minute: 45 }, // 4:45 PM AEST
-  newsletter: { hour: 17, minute: 0 }  // 5:00 PM AEST
-};
-
-// Get current schedule
-app.get('/api/schedule', (req, res) => {
-  try {
-    res.json({
-      success: true,
-      data: {
-        scraping: systemSchedule.scraping,
-        newsletter: systemSchedule.newsletter,
-        timezone: 'Australia/Sydney'
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Update scraping schedule
-app.post('/api/schedule/scraping', async (req, res) => {
-  try {
-    const { hour, minute } = req.body;
-    
-    // Validate input
-    if (typeof hour !== 'number' || typeof minute !== 'number') {
-      return res.status(400).json({
-        success: false,
-        error: 'Hour and minute must be numbers'
-      });
-    }
-    
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid time: hour must be 0-23, minute must be 0-59'
-      });
-    }
-    
-    console.log(`Updating scraping schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
-    
-    // Update schedule
-    systemSchedule.scraping = { hour, minute };
-    
-    // TODO: In production, restart cron jobs with new schedule
-    // restartScrapingCronJob(hour, minute);
-    
-    res.json({
-      success: true,
-      message: 'Scraping schedule updated successfully',
-      data: {
-        scraping: systemSchedule.scraping,
-        note: 'Changes will take effect on next system restart in production'
-      }
-    });
-    
-    console.log(`Scraping schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
-    
-  } catch (error) {
-    console.error('Update scraping schedule failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Update newsletter schedule
-app.post('/api/schedule/newsletter', async (req, res) => {
-  try {
-    const { hour, minute } = req.body;
-    
-    // Validate input
-    if (typeof hour !== 'number' || typeof minute !== 'number') {
-      return res.status(400).json({
-        success: false,
-        error: 'Hour and minute must be numbers'
-      });
-    }
-    
-    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid time: hour must be 0-23, minute must be 0-59'
-      });
-    }
-    
-    console.log(`Updating newsletter schedule to ${hour}:${minute.toString().padStart(2, '0')}`);
-    
-    // Update schedule
-    systemSchedule.newsletter = { hour, minute };
-    
-    // TODO: In production, restart cron jobs with new schedule
-    // restartNewsletterCronJob(hour, minute);
-    
-    res.json({
-      success: true,
-      message: 'Newsletter schedule updated successfully',
-      data: {
-        newsletter: systemSchedule.newsletter,
-        note: 'Changes will take effect on next system restart in production'
-      }
-    });
-    
-    console.log(`Newsletter schedule updated to ${hour}:${minute.toString().padStart(2, '0')} AEST`);
-    
-  } catch (error) {
-    console.error('Update newsletter schedule failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ========================================
-// ENHANCED NEWSLETTER PREVIEW ENDPOINT
-// ========================================
-
-// Generate newsletter preview (without sending)
-app.post('/api/newsletter/preview/:segment', async (req, res) => {
-  try {
-    const segment = req.params.segment;
-    
-    if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid segment. Must be "pro" or "driver"'
-      });
-    }
-    
-    console.log(`Generating newsletter preview for ${segment} segment`);
-    
-    const newsletterGenerator = new NewsletterGenerator();
-    
-    // Generate newsletter without sending emails
-    const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
-    
-    res.json({
-      success: true,
-      message: `${segment} newsletter preview generated`,
-      data: {
-        segment: newsletter.segment,
-        subject: newsletter.subject,
-        articles: newsletter.articles.length,
-        html: newsletter.html,
-        text: newsletter.text,
-        previewUrl: newsletter.filename
-      }
-    });
-    
-    console.log(`Newsletter preview generated for ${segment} segment`);
-    
-  } catch (error) {
-    console.error('Newsletter preview failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ========================================
-// HELPER FUNCTIONS FOR PRODUCTION DEPLOYMENT
-// ========================================
-
-// Function to restart cron jobs with new schedule (for production use)
-function restartCronJobs() {
-  // This would be implemented in production to restart the cron jobs
-  // with the new schedule stored in systemSchedule
-  console.log('Cron job restart functionality would be implemented here');
-  
-  // Example implementation:
-  // cron.schedule(`${systemSchedule.scraping.minute} ${systemSchedule.scraping.hour} * * *`, async () => {
-  //   // Scraping logic
-  // }, { timezone: "Australia/Sydney" });
-  
-  // cron.schedule(`${systemSchedule.newsletter.minute} ${systemSchedule.newsletter.hour} * * *`, async () => {
-  //   // Newsletter logic  
-  // }, { timezone: "Australia/Sydney" });
-}
-
-// Enhanced status endpoint to include schedule
-app.get('/api/status/enhanced', async (req, res) => {
+// --- STATUS, EMAIL STATUS, DEBUG ---
+app.get('/api/status', async (req, res) => {
   try {
     const emailStatus = await emailSender.verifyConnection();
     const subscriberTest = await emailSender.testEmailSystem();
-    
     res.json({
       status: 'running',
       version: '2.0.0',
@@ -1264,348 +461,45 @@ app.get('/api/status/enhanced', async (req, res) => {
           configured: !!process.env.OPENAI_API_KEY
         }
       },
-      schedule: {
-        active: process.env.NODE_ENV === 'production',
-        scraping: {
-          time: `${systemSchedule.scraping.hour}:${systemSchedule.scraping.minute.toString().padStart(2, '0')}`,
-          cron: `${systemSchedule.scraping.minute} ${systemSchedule.scraping.hour} * * *`
-        },
-        newsletter: {
-          time: `${systemSchedule.newsletter.hour}:${systemSchedule.newsletter.minute.toString().padStart(2, '0')}`,
-          cron: `${systemSchedule.newsletter.minute} ${systemSchedule.newsletter.hour} * * *`
-        },
-        timezone: 'Australia/Sydney'
-      },
       currentTime: new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }),
       timestamp: new Date().toISOString()
     });
   } catch (error) {
+    res.status(500).json({ status: 'error', error: error.message, timestamp: new Date().toISOString() });
+  }
+});
+
+app.get('/api/email-status', async (req, res) => {
+  try {
+    const connectionVerified = await emailSender.verifyConnection();
+    res.json({
+      success: true,
+      configuration: {
+        emailConfigured: !!process.env.EMAIL_USER || !!process.env.RESEND_API_KEY,
+        recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS,
+        connectionVerified,
+        smtpHost: process.env.EMAIL_HOST || 'smtp.gmail.com',
+        smtpPort: process.env.EMAIL_PORT || 587,
+        fromAddress: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'Not configured',
+        environment: process.env.NODE_ENV || 'development'
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
     res.status(500).json({
-      status: 'error',
+      success: false,
+      configuration: { emailConfigured: !!process.env.EMAIL_USER, recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS, connectionVerified: false },
       error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// ========================================
-// ANALYTICS ENDPOINTS (PLACEHOLDER)
-// ========================================
-
-// Get newsletter analytics
-app.get('/api/analytics/newsletters', (req, res) => {
-  try {
-    // Placeholder data - in production this would come from database
-    res.json({
-      success: true,
-      data: {
-        last7Days: {
-          emailsSent: 14, // 2 newsletters × 7 days
-          successRate: 98.5,
-          averageSubscribers: systemSchedule.newsletter ? 
-            (systemStatus.subscriberStats?.pro?.count || 0) + (systemStatus.subscriberStats?.driver?.count || 0) : 0
-        },
-        bySegment: {
-          pro: {
-            sent: 7,
-            successRate: 99.1,
-            subscribers: systemStatus.subscriberStats?.pro?.count || 0
-          },
-          driver: {
-            sent: 7, 
-            successRate: 97.8,
-            subscribers: systemStatus.subscriberStats?.driver?.count || 0
-          }
-        }
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ========================================
-// FRONTEND COMPATIBILITY ENDPOINTS
-// ========================================
-
-// New newsletter workflow endpoints (matching frontend expectations)
-app.post('/api/newsletter/generate/:segment', async (req, res) => {
-  try {
-    const segment = req.params.segment;
-    
-    if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid segment. Must be "pro" or "driver"'
-      });
-    }
-    
-    console.log(`Generating newsletter preview for ${segment} segment`);
-    
-    const newsletterGenerator = new NewsletterGenerator();
-    const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
-    
-    // Create unique newsletter ID
-    const newsletterId = `NL_${segment}_${Date.now()}`;
-    
-    res.json({
-      success: true,
-      data: {
-        newsletterId: newsletterId,
-        segment: segment,
-        subject: newsletter.subject,
-        articlesCount: newsletter.articles?.length || 0,
-        previewHtml: newsletter.html,
-        generatedAt: new Date().toISOString()
-      }
-    });
-    
-  } catch (error) {
-    console.error('Newsletter preview failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Send newsletter endpoint
-app.post('/api/newsletter/send/:newsletterId', async (req, res) => {
-  try {
-    const { testEmail, confirmSend } = req.body;
-    
-    if (testEmail) {
-      // Send test email
-      const testData = {
-        html: `<h2>Test Email</h2><p>This is a test from SFP Newsletter System</p>`,
-        subject: 'SFP Newsletter Test',
-        text: 'Test email'
-      };
-      
-      const testSubscriber = { email: testEmail, name: 'Test User' };
-      await emailSender.sendSingleEmail(testData, testSubscriber);
-      
-      res.json({
-        success: true,
-        message: 'Test email sent successfully'
-      });
-      
-    } else if (confirmSend) {
-      // This would send to all subscribers - for now just return success
-      res.json({
-        success: true,
-        message: 'Newsletter sent successfully',
-        data: {
-          emailResults: { success: 10, failed: 0 }
-        }
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        error: 'Must specify either testEmail or confirmSend=true'
-      });
-    }
-    
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Advanced scheduling endpoints
-app.get('/api/schedule/advanced', (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      schedules: {
-        scraping: { 
-          enabled: true, 
-          frequency: 'weekly', 
-          dayOfWeek: 1, 
-          hour: 16, 
-          minute: 45 
-        },
-        newsletter: { 
-          enabled: true, 
-          frequency: 'weekly', 
-          dayOfWeek: 1, 
-          hour: 17, 
-          minute: 30, 
-          dependsOn: 'scraping', 
-          delayAfterDependency: 45 
-        }
-      },
-      nextRuns: {
-        scraping: 'Manual trigger available',
-        newsletter: 'Manual trigger available'
-      },
-      activeJobs: []
-    }
-  });
-});
-
-// Update schedule endpoint
-app.put('/api/schedule/:jobType', (req, res) => {
-  const { jobType } = req.params;
-  
-  if (!['scraping', 'newsletter'].includes(jobType)) {
-    return res.status(400).json({ 
-      success: false, 
-      error: 'Invalid job type' 
-    });
-  }
-  
-  console.log(`Schedule update requested for ${jobType}:`, req.body);
-  
-  res.json({
-    success: true,
-    message: `${jobType} schedule updated successfully`,
-    data: req.body
-  });
-});
-
-// Trigger job endpoint
-app.post('/api/schedule/trigger/:jobType', async (req, res) => {
-  try {
-    const { jobType } = req.params;
-    
-    if (jobType === 'scraping') {
-      // Trigger scraping
-      const results = await scrapeAllSources();
-      res.json({
-        success: true,
-        message: 'Scraping job triggered successfully',
-        results: { articlesFound: results.articles?.length || 0 }
-      });
-      
-    } else if (jobType === 'newsletter') {
-      // Trigger newsletter
-      const newsletterGenerator = new NewsletterGenerator();
-      const results = await newsletterGenerator.generateNewsletter('pro', true);
-      
-      res.json({
-        success: true,
-        message: 'Newsletter job triggered successfully',
-        results: results
-      });
-      
-    } else {
-      res.status(400).json({ 
-        success: false, 
-        error: 'Invalid job type. Must be "scraping" or "newsletter"' 
-      });
-    }
-    
-  } catch (error) {
-    console.error(`Job trigger failed for ${req.params.jobType}:`, error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Unhandled error:', error);
-  res.status(500).json({ 
-    success: false, 
-    error: 'Internal server error',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    error: 'Endpoint not found',
-    availableEndpoints: '/',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Start server with enhanced startup checks
-app.listen(PORT, async () => {
-  console.log(`SFP Newsletter Automation v2.0 running on port ${PORT}`);
-  console.log(`Health check: https://sfp-newsletter-automation-production.up.railway.app/health`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Current Sydney time: ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}`);
-  
-  // Enhanced startup checks
-  console.log('\nRunning startup diagnostics...');
-  
-  // Check email configuration
-  if (process.env.EMAIL_USER && process.env.NEWSLETTER_RECIPIENTS) {
-    console.log('Email configuration detected');
-    
-    // Check FROM address configuration
-    const fromEmail = process.env.EMAIL_FROM && process.env.EMAIL_FROM.includes('@') 
-      ? process.env.EMAIL_FROM 
-      : process.env.EMAIL_USER;
-    console.log(`From: ${fromEmail}`);
-    
-    // Verify SMTP connection
-    try {
-      const verified = await emailSender.verifyConnection();
-      if (verified) {
-        console.log('Email server connection verified');
-        
-        // Test subscriber system
-        try {
-          const testResult = await emailSender.testEmailSystem();
-          console.log('Subscriber System Status:');
-          console.log(`   Pro Subscribers: ${testResult.proSubscribers}`);
-          console.log(`   Driver Subscribers: ${testResult.driverSubscribers}`);
-          console.log(`   Total Subscribers: ${testResult.totalSubscribers}`);
-          
-          if (testResult.totalSubscribers === 0) {
-            console.log('No subscribers found - check Google Sheets configuration');
-          }
-        } catch (error) {
-          console.log('Subscriber system test failed:', error.message);
-        }
-      } else {
-        console.log('Email server connection failed');
-        console.log('Check EMAIL_PASS - consider using Gmail App Password');
-      }
-    } catch (error) {
-      console.log('Email configuration error:', error.message);
-    }
-  } else {
-    console.log('Email not configured - set EMAIL_USER and NEWSLETTER_RECIPIENTS env vars');
-  }
-  
-  // Check other services
-  console.log('\nService Configuration:');
-  console.log(`   Google Sheets: ${process.env.GOOGLE_SHEETS_ID ? 'Configured' : 'Missing'}`);
-  console.log(`   OpenAI API: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Missing'}`);
-  console.log(`   Scheduled Tasks: ${process.env.NODE_ENV === 'production' ? 'Active' : 'Disabled (dev mode)'}`);
-  
-  console.log('\nReady for operation!');
-});
-
-// Add these endpoints to your src/index.js file
-
-// Debug endpoint to diagnose issues
 app.get('/api/debug', (req, res) => {
   const debug = {
     timestamp: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
     isProduction: process.env.NODE_ENV === 'production',
-    
-    // Check file system
-    fileSystem: {
-      currentDir: process.cwd(),
-      files: []
-    },
-    
-    // Check environment variables (safely)
     environment: {
       hasOpenAI: !!process.env.OPENAI_API_KEY,
       hasGoogleEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
@@ -1613,341 +507,59 @@ app.get('/api/debug', (req, res) => {
       hasResendKey: !!process.env.RESEND_API_KEY,
       hasSheetsId: !!process.env.GOOGLE_SHEETS_ID
     },
-    
-    // Check memory usage
     memory: process.memoryUsage(),
-    
-    // Check module availability
     modules: {}
   };
-  
-  // Check if files exist
-  const fs = require('fs');
-  const path = require('path');
-  
-  try {
-    const files = fs.readdirSync('./src');
-    debug.fileSystem.files = files;
-  } catch (error) {
-    debug.fileSystem.error = error.message;
-  }
-  
-  // Check if scraper module can be imported
   try {
     const scraper = require('./scraper');
-    debug.modules.scraper = {
-      available: true,
-      exports: Object.keys(scraper)
-    };
+    debug.modules.scraper = { available: true, exports: Object.keys(scraper) };
   } catch (error) {
-    debug.modules.scraper = {
-      available: false,
-      error: error.message
-    };
+    debug.modules.scraper = { available: false, error: error.message };
   }
-  
   res.json(debug);
 });
 
-// Schedule status endpoint
-app.get('/api/schedule-status', (req, res) => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
-  res.json({
-    nodeEnv: process.env.NODE_ENV,
-    isProduction,
-    schedulingEnabled: isProduction,
-    timestamp: new Date().toISOString(),
-    timezone: 'Australia/Sydney',
-    nextScheduledRun: isProduction ? 'Automated scheduling active' : 'Disabled (not in production)',
-    manualTriggersAvailable: true
-  });
-});
-
-// Add this debug endpoint to your index.js
-app.get('/api/debug', (req, res) => {
-  const debug = {
-    timestamp: new Date().toISOString(),
-    nodeEnv: process.env.NODE_ENV,
-    environment: {
-      hasGoogleEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
-      hasGoogleKey: !!process.env.GOOGLE_PRIVATE_KEY,
-      hasSheetsId: !!process.env.GOOGLE_SHEETS_ID
-    },
-    modules: {}
-  };
-  
-  try {
-    const scraper = require('./scraper');
-    debug.modules.scraper = {
-      available: true,
-      exports: Object.keys(scraper)
-    };
-  } catch (error) {
-    debug.modules.scraper = {
-      available: false,
-      error: error.message
-    };
-  }
-  
-  res.json(debug);
-});
-
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    message: 'SFP Newsletter Automation API',
-    status: 'running',
-    timestamp: new Date().toISOString(),
-    endpoints: [
-      'GET / - This message',
-      'GET /api/debug - System diagnostics',
-      'GET /api/schedule-status - Scheduler status',
-      'POST /api/scrape - Manual scraping',
-      'GET /api/subscribers - View subscribers',
-      'POST /api/subscribers - Add subscriber'
-    ]
-  });
-});
-
-// ========================================
-// NEW: SEPARATED NEWSLETTER WORKFLOW API ENDPOINTS
-// ========================================
-
-// Cache for storing generated newsletters before sending
-let newsletterCache = new Map();
-
-// Step 1: Generate newsletter preview (without sending or marking articles as used)
-app.post('/api/newsletter/generate/:segment', async (req, res) => {
-  try {
-    const segment = req.params.segment;
-    
-    if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid segment. Must be "pro" or "driver"'
-      });
-    }
-    
-    console.log(`📧 Generating newsletter preview for ${segment} segment (no sending, no article marking)`);
-    
-    const newsletterGenerator = new NewsletterGenerator();
-    
-    // Generate newsletter WITHOUT sending (sendEmail = false)
-    const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
-    
-    // Create unique newsletter ID for this preview
-    const newsletterId = `NL_${segment}_${Date.now()}`;
-    
-    // Cache the newsletter data for later sending
-    newsletterCache.set(newsletterId, {
-      newsletter: newsletter,
-      segment: segment,
-      generatedAt: new Date().toISOString(),
-      articles: newsletter.articles || []
-    });
-    
-    // Clean old cache entries (keep only last 10)
-    if (newsletterCache.size > 10) {
-      const oldestKey = newsletterCache.keys().next().value;
-      newsletterCache.delete(oldestKey);
-    }
-    
-    res.json({
-      success: true,
-      message: `${segment} newsletter preview generated (articles NOT marked as used)`,
-      data: {
-        newsletterId: newsletterId,
-        segment: segment,
-        subject: newsletter.subject,
-        articlesCount: newsletter.articles?.length || 0,
-        previewHtml: newsletter.html,
-        generatedAt: new Date().toISOString()
-      }
-    });
-    
-    console.log(`✅ Newsletter preview generated: ${newsletterId} with ${newsletter.articles?.length || 0} articles`);
-    
-  } catch (error) {
-    console.error('❌ Newsletter preview generation failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Step 2: Send newsletter from cache (this is when articles get marked as used)
-app.post('/api/newsletter/send/:newsletterId', async (req, res) => {
-  try {
-    const newsletterId = req.params.newsletterId;
-    const { testEmail, confirmSend } = req.body;
-    
-    // Get cached newsletter
-    const cachedData = newsletterCache.get(newsletterId);
-    if (!cachedData) {
-      return res.status(404).json({
-        success: false,
-        error: 'Newsletter not found. Please generate preview first.'
-      });
-    }
-    
-    const { newsletter, segment, articles } = cachedData;
-    
-    if (testEmail) {
-      // Send test email only (don't mark articles as used)
-      console.log(`📧 Sending test email for ${newsletterId} to ${testEmail}`);
-      
-      const testSubscriber = { 
-        email: testEmail, 
-        name: 'Test User',
-        segment: segment
-      };
-      
-      await emailSender.sendSingleEmail(newsletter, testSubscriber);
-      
-      res.json({
-        success: true,
-        message: 'Test email sent successfully',
-        data: {
-          newsletterId: newsletterId,
-          testEmail: testEmail,
-          segment: segment
-        }
-      });
-      
-    } else if (confirmSend) {
-      // Send to all subscribers AND mark articles as used
-      console.log(`📤 Sending newsletter ${newsletterId} to all ${segment} subscribers and marking articles as used`);
-      
-      // Send to all subscribers
-      const subscribers = await emailSender.getSubscribersFromSheet(segment);
-      const emailResults = await emailSender.sendBulkEmails(newsletter, subscribers);
-      
-      // NOW mark articles as used (only when actually sent to subscribers)
-      await markArticlesAsUsed(articles, segment, newsletterId);
-      
-      // Remove from cache after successful send
-      newsletterCache.delete(newsletterId);
-      
-      res.json({
-        success: true,
-        message: `Newsletter sent to all ${segment} subscribers and articles marked as used`,
-        data: {
-          newsletterId: newsletterId,
-          segment: segment,
-          emailResults: emailResults,
-          articlesMarkedAsUsed: articles.length
-        }
-      });
-      
-      console.log(`✅ Newsletter ${newsletterId} sent and articles marked as used`);
-      
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: 'Must specify either testEmail or confirmSend=true'
-      });
-    }
-    
-  } catch (error) {
-    console.error('❌ Newsletter sending failed:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Helper function: Mark articles as used in Google Sheets
-async function markArticlesAsUsed(articles, segment, newsletterId) {
-  if (!articles || articles.length === 0) {
-    console.log('No articles to mark as used');
-    return;
-  }
-  
-  try {
-    const auth = await google.auth.getClient({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    
-    const sheets = google.sheets({ version: 'v4', auth });
-    
-    // Get all data from Article_Archive sheet
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: 'Article_Archive!A:Z',
-    });
-    
-    const rows = response.data.values;
-    if (!rows || rows.length < 2) {
-      console.log('No articles found in Article_Archive sheet');
-      return;
-    }
-    
-    // Find column indices
-    const headers = rows[0];
-    const urlColumnIndex = headers.findIndex(h => h === 'URL');
-    const usedColumnIndex = headers.findIndex(h => h === 'Used_In_Issue');
-    
-    if (urlColumnIndex === -1 || usedColumnIndex === -1) {
-      throw new Error('Required columns (URL, Used_In_Issue) not found in Article_Archive sheet');
-    }
-    
-// Create a map of URLs from the articles
-const articleUrls = new Set(articles.map(article => article.url || article.link));
-
-// Find matching rows and prepare updates
-const updates = [];
-const timestamp = new Date().toISOString();
-
-for (let i = 1; i < rows.length; i++) {
-  const row = rows[i];
-  const articleUrl = row[urlColumnIndex];
-  
-  if (articleUrls.has(articleUrl) && !row[usedColumnIndex]) {
-    // Mark this article as used
-    const usageMarker = `${segment}-${newsletterId}_${timestamp}`;
-    
-    updates.push({
-      range: `Article_Archive!${String.fromCharCode(65 + usedColumnIndex)}${i + 1}`,
-      values: [[usageMarker]]
-    });
-  }
-}
-
-// Apply all updates
-if (updates.length > 0) {
-  await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-    requestBody: {
-      valueInputOption: 'RAW',
-      data: updates
-    }
-  });
-  
-  console.log(`✅ Marked ${updates.length} articles as used in Article_Archive sheet`);
+// --- ADVANCED SCHEDULER (AUTOMATION) ---
+let scheduler;
+if (process.env.NODE_ENV === 'production') {
+  scheduler = new AdvancedScheduler();
+  scheduler.initialize();
+  setupAdvancedSchedulingEndpoints(app, scheduler);
 } else {
-  console.log('No matching articles found to mark as used');
+  scheduler = {
+    getConfiguration: () => ({
+      schedules: {
+        scraping: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 16, minute: 45 },
+        newsletter: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 17, minute: 30 }
+      },
+      nextRuns: { scraping: 'Dev mode - disabled', newsletter: 'Dev mode - disabled' },
+      activeJobs: [],
+      dependencies: {}
+    }),
+    updateSchedule: () => { throw new Error('Scheduling not available in development mode'); },
+    triggerJob: async (jobType) => {
+      console.log(`🔧 Dev mode manual trigger: ${jobType}`);
+    }
+  };
+  setupAdvancedSchedulingEndpoints(app, scheduler);
 }
 
-} catch (error) {
-console.error('❌ Failed to mark articles as used:', error);
-// Don't throw error - we don't want to fail the email sending if article marking fails
-}
-}
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-console.log('SIGTERM received, shutting down gracefully');
-process.exit(0);
+// --- 404 HANDLER ---
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: 'Endpoint not found', timestamp: new Date().toISOString() });
 });
 
+// --- GRACEFUL SHUTDOWN ---
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
 process.on('SIGINT', () => {
-console.log('SIGINT received, shutting down gracefully');
-process.exit(0);
+  console.log('SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
+
+// --- STARTUP ---
+app.listen(PORT, () => {
+  console.log(`SFP Newsletter Automation running on port ${PORT}`);
 });
