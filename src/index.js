@@ -435,7 +435,64 @@ app.delete('/api/subscribers/:email', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+res.json({
+      success: true,
+      message: 'Subscriber deleted successfully',
+      data: { email: targetEmail }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
+app.post('/api/test-email', async (req, res) => {
+  try {
+    const { email, type = 'simple', segment = 'pro' } = req.body;
+    const testRecipient = email || process.env.NEWSLETTER_RECIPIENTS?.split(',')[0];
+    
+    if (!testRecipient) {
+      return res.status(400).json({
+        success: false,
+        error: 'No test recipient provided'
+      });
+    }
+
+    const testData = {
+      html: `<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #1e40af;">SFP Newsletter System Test</h2>
+        <p>This is a test email from the Safe Freight Program newsletter automation system.</p>
+        <p><strong>Test Time:</strong> ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
+        <p><strong>System Status:</strong> Email sending functionality is working correctly</p>
+        </body></html>`,
+      text: 'SFP Newsletter System Test - Email sending working correctly',
+      subject: 'SFP Newsletter System Test'
+    };
+    
+    const testSubscriber = { 
+      email: testRecipient, 
+      name: 'Test User',
+      segment: 'test'
+    };
+    
+    await emailSender.sendSingleEmail(testData, testSubscriber);
+    
+    res.json({
+      success: true,
+      message: 'Test email sent successfully',
+      data: {
+        recipient: testRecipient,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- STATUS, EMAIL STATUS, DEBUG ---
 // --- STATUS, EMAIL STATUS, DEBUG ---
 app.get('/api/status', async (req, res) => {
   try {
