@@ -55,7 +55,7 @@ app.use('/static', express.static('public', {
 // Serve public files directly at root as well (for backward compatibility)
 app.use(express.static('public'));
 
-// --- SPECIFIC ROUTE FOR ADMIN DASHBOARD ---
+// --- SPECIFIC ROUTES FOR ADMIN DASHBOARD ---
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
 });
@@ -66,16 +66,6 @@ app.get('/dashboard', (req, res) => {
 
 app.get('/newsletter-management.html', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
-});
-
-app.get('/api/version', (req, res) => {
-  res.json({
-    success: true,
-    version: '2.0.0',
-    system: 'SFP Newsletter Automation',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production'
-  });
 });
 
 // --- GLOBALS ---
@@ -98,31 +88,52 @@ app.get('/', (req, res) => {
     message: 'SFP Newsletter Automation API',
     status: 'running',
     timestamp: new Date().toISOString(),
+    version: '2.0.0',
     endpoints: [
-      'GET /health',
-      'POST /api/scrape',
-      'POST /api/newsletter/generate/:segment',
-      'POST /api/newsletter/send/:newsletterId',
-      'GET /api/subscribers',
-      'POST /api/subscribers',
-      'PUT /api/subscribers/:email',
-      'DELETE /api/subscribers/:email',
-      'GET /api/status',
-      'GET /api/email-status',
-      'GET /api/schedule/advanced',
-      'PUT /api/schedule/:jobType',
-      'POST /api/schedule/trigger/:jobType'
+      'GET /health - Health check',
+      'GET /admin - Admin dashboard',
+      'POST /api/scrape - Manual article scraping',
+      'POST /api/newsletter/generate/:segment - Generate newsletter preview',
+      'POST /api/newsletter/send/:newsletterId - Send generated newsletter',
+      'GET /api/subscribers/:segment? - Get subscribers',
+      'POST /api/subscribers - Add subscriber',
+      'PUT /api/subscribers/:email - Update subscriber',
+      'DELETE /api/subscribers/:email - Delete subscriber',
+      'GET /api/status - System status',
+      'GET /api/articles - Get article archive',
+      'GET /api/newsletters - Get recent newsletters',
+      'POST /api/newsletters/send - Send new newsletter',
+      'POST /api/test-email - Send test email',
+      'GET /api/analytics/summary - Analytics overview',
+      'GET /api/config - System configuration'
     ]
+  });
+});
+
+// --- API VERSION ---
+app.get('/api/version', (req, res) => {
+  res.json({
+    success: true,
+    version: '2.0.0',
+    system: 'SFP Newsletter Automation',
+    timestamp: new Date().toISOString(),
+    build: process.env.RAILWAY_GIT_COMMIT_SHA || 'local',
+    environment: process.env.NODE_ENV || 'production'
   });
 });
 
 // --- SCRAPING (Manual) ---
 app.post('/api/scrape', async (req, res) => {
   try {
+    const { sources } = req.body; // Optional: specific sources to scrape
     const startTime = Date.now();
+    
+    console.log('🔍 Manual scraping triggered via API...');
+    
     const results = await scrapeAllSources();
     const articles = results.articles || [];
     let savedCount = 0;
+    
     if (articles.length > 0) {
       try {
         const SheetsManager = require('../config/sheets');
@@ -130,21 +141,28 @@ app.post('/api/scrape', async (req, res) => {
         await sheetsManager.initialize();
         const savedArticles = await sheetsManager.saveArticles(articles);
         savedCount = savedArticles.length;
+        console.log(`💾 Saved ${savedCount} articles to sheets`);
       } catch (sheetsError) {
         console.error('⚠️ Failed to save to sheets:', sheetsError.message);
       }
     }
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    
     res.json({
       success: true,
       message: 'Scraping completed successfully',
-      results: {
+      data: {
         articlesFound: articles.length,
         savedToSheets: savedCount,
-        duration: `${((Date.now() - startTime) / 1000).toFixed(1)} seconds`,
-        timestamp: new Date().toISOString()
+        duration: `${duration} seconds`,
+        timestamp: new Date().toISOString(),
+        sources: results.errors ? results.errors.length : 0,
+        errors: results.errors || []
       }
     });
   } catch (error) {
+    console.error('❌ Scraping API error:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -263,6 +281,104 @@ async function markArticlesAsUsed(articles, segment, newsletterId) {
     console.error('Failed to mark articles as used:', error);
   }
 }
+
+// --- NEWSLETTER MANAGEMENT (Direct Send - Alternative API) ---
+app.post('/api/newsletters/send', async (req, res) => {
+  try {
+    const { segment, testEmail } = req.body;
+    
+    if (!['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid segment. Must be "pro" or "driver"'
+      });
+    }
+    
+    const newsletterGenerator = new NewsletterGenerator();
+    
+    if (testEmail) {
+      // Send test email only
+      const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
+      const testSubscriber = { 
+        email: testEmail, 
+        name: 'Test User',
+        segment: segment
+      };
+      
+      await emailSender.sendSingleEmail(newsletter, testSubscriber);
+      
+      return res.json({
+        success: true,
+        message: 'Test newsletter sent successfully',
+        data: {
+          segment: segment,
+          recipient: testEmail,
+          subject: newsletter.subject
+        }
+      });
+    } else {
+      // Send to all subscribers
+      const newsletter = await newsletterGenerator.generateNewsletter(segment, true);
+      
+      return res.json({
+        success: true,
+        message: 'Newsletter sent to all subscribers',
+        data: {
+          segment: segment,
+          subject: newsletter.subject,
+          emailSending: newsletter.emailSending
+        }
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- GET RECENT NEWSLETTERS ---
+app.get('/api/newsletters', async (req, res) => {
+  try {
+    const { google } = require('googleapis');
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Content_Archive!A:J',
+    });
+    
+    const rows = response.data.values || [];
+    const newsletters = rows.slice(1, 21).map(row => ({ // Get last 20 newsletters
+      id: row[0] || '',
+      segment: row[1] || '',
+      subject: row[2] || '',
+      published_at: row[3] || '',
+      sent_count: parseInt(row[4]) || 0,
+      open_rate: parseFloat(row[6]) || 0,
+      click_rate: parseFloat(row[7]) || 0
+    }));
+    
+    res.json({
+      success: true,
+      data: newsletters,
+      count: newsletters.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 // --- SUBSCRIBER MANAGEMENT ---
 app.get('/api/subscribers/:segment?', async (req, res) => {
@@ -472,296 +588,6 @@ app.delete('/api/subscribers/:email', async (req, res) => {
   }
 });
 
-// --- TEST EMAIL ---
-app.post('/api/test-email', async (req, res) => {
-  try {
-    const { email, type = 'simple', segment = 'pro' } = req.body;
-    const testRecipient = email || process.env.NEWSLETTER_RECIPIENTS?.split(',')[0];
-    
-    if (!testRecipient) {
-      return res.status(400).json({
-        success: false,
-        error: 'No test recipient provided'
-      });
-    }
-
-    const testData = {
-      html: `<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #1e40af;">SFP Newsletter System Test</h2>
-        <p>This is a test email from the Safe Freight Program newsletter automation system.</p>
-        <p><strong>Test Time:</strong> ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
-        <p><strong>System Status:</strong> Email sending functionality is working correctly</p>
-        </body></html>`,
-      text: 'SFP Newsletter System Test - Email sending working correctly',
-      subject: 'SFP Newsletter System Test'
-    };
-    
-    const testSubscriber = { 
-      email: testRecipient, 
-      name: 'Test User',
-      segment: 'test'
-    };
-    
-    await emailSender.sendSingleEmail(testData, testSubscriber);
-    
-    res.json({
-      success: true,
-      message: 'Test email sent successfully',
-      data: {
-        recipient: testRecipient,
-        timestamp: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// --- STATUS, EMAIL STATUS, DEBUG ---
-app.get('/api/status', async (req, res) => {
-  try {
-    const emailStatus = await emailSender.verifyConnection();
-    const subscriberTest = await emailSender.testEmailSystem();
-    res.json({
-      status: 'running',
-      version: '2.0.0',
-      uptime: process.uptime(),
-      environment: process.env.NODE_ENV || 'development',
-      lastRestart: new Date().toISOString(),
-      services: {
-        email: {
-          configured: !!process.env.EMAIL_USER || !!process.env.RESEND_API_KEY,
-          connected: emailStatus,
-          subscribers: subscriberTest.totalSubscribers || 0
-        },
-        sheets: {
-          configured: !!process.env.GOOGLE_SHEETS_ID,
-          connected: subscriberTest.smtpWorking
-        },
-        openai: {
-          configured: !!process.env.OPENAI_API_KEY
-        }
-      },
-      currentTime: new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }),
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({ status: 'error', error: error.message, timestamp: new Date().toISOString() });
-  }
-});
-
-app.get('/api/email-status', async (req, res) => {
-  try {
-    const connectionVerified = await emailSender.verifyConnection();
-    res.json({
-      success: true,
-      configuration: {
-        emailConfigured: !!process.env.EMAIL_USER || !!process.env.RESEND_API_KEY,
-        recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS,
-        connectionVerified,
-        smtpHost: process.env.EMAIL_HOST || 'smtp.gmail.com',
-        smtpPort: process.env.EMAIL_PORT || 587,
-        fromAddress: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'Not configured',
-        environment: process.env.NODE_ENV || 'development'
-      },
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      configuration: { emailConfigured: !!process.env.EMAIL_USER, recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS, connectionVerified: false },
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-app.get('/api/debug', (req, res) => {
-  const debug = {
-    timestamp: new Date().toISOString(),
-    nodeEnv: process.env.NODE_ENV,
-    isProduction: process.env.NODE_ENV === 'production',
-    environment: {
-      hasOpenAI: !!process.env.OPENAI_API_KEY,
-      hasGoogleEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
-      hasGoogleKey: !!process.env.GOOGLE_PRIVATE_KEY,
-      hasResendKey: !!process.env.RESEND_API_KEY,
-      hasSheetsId: !!process.env.GOOGLE_SHEETS_ID
-    },
-    memory: process.memoryUsage(),
-    modules: {}
-  };
-  try {
-    const scraper = require('./scraper');
-    debug.modules.scraper = { available: true, exports: Object.keys(scraper) };
-  } catch (error) {
-    debug.modules.scraper = { available: false, error: error.message };
-  }
-  res.json(debug);
-});
-
-// --- API VERSION ENDPOINT ---
-app.get('/api/version', (req, res) => {
-  res.json({
-    success: true,
-    version: '2.0.0',
-    system: 'SFP Newsletter Automation',
-    timestamp: new Date().toISOString(),
-    build: process.env.RAILWAY_GIT_COMMIT_SHA || 'local',
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// --- NEWSLETTER MANAGEMENT ENDPOINTS ---
-app.get('/api/newsletters', async (req, res) => {
-  try {
-    // Get recent newsletters from Content_Archive sheet
-    const { google } = require('googleapis');
-    const auth = await google.auth.getClient({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    });
-    
-    const sheets = google.sheets({ version: 'v4', auth });
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: 'Content_Archive!A:J',
-    });
-    
-    const rows = response.data.values || [];
-    const newsletters = rows.slice(1, 21).map(row => ({ // Get last 20 newsletters
-      id: row[0] || '',
-      segment: row[1] || '',
-      subject: row[2] || '',
-      published_at: row[3] || '',
-      sent_count: parseInt(row[4]) || 0,
-      open_rate: parseFloat(row[6]) || 0,
-      click_rate: parseFloat(row[7]) || 0
-    }));
-    
-    res.json({
-      success: true,
-      data: newsletters,
-      count: newsletters.length
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-app.post('/api/newsletters/send', async (req, res) => {
-  try {
-    const { segment, testEmail } = req.body;
-    
-    if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid segment. Must be "pro" or "driver"'
-      });
-    }
-    
-    const newsletterGenerator = new NewsletterGenerator();
-    
-    if (testEmail) {
-      // Send test email only
-      const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
-      const testSubscriber = { 
-        email: testEmail, 
-        name: 'Test User',
-        segment: segment
-      };
-      
-      await emailSender.sendSingleEmail(newsletter, testSubscriber);
-      
-      return res.json({
-        success: true,
-        message: 'Test newsletter sent successfully',
-        data: {
-          segment: segment,
-          recipient: testEmail,
-          subject: newsletter.subject
-        }
-      });
-    } else {
-      // Send to all subscribers
-      const newsletter = await newsletterGenerator.generateNewsletter(segment, true);
-      
-      return res.json({
-        success: true,
-        message: 'Newsletter sent to all subscribers',
-        data: {
-          segment: segment,
-          subject: newsletter.subject,
-          emailSending: newsletter.emailSending
-        }
-      });
-    }
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// --- ENHANCED SCRAPING ENDPOINT ---
-app.post('/api/scrape', async (req, res) => {
-  try {
-    const { sources } = req.body; // Optional: specific sources to scrape
-    const startTime = Date.now();
-    
-    console.log('🔍 Manual scraping triggered via API...');
-    
-    const results = await scrapeAllSources();
-    const articles = results.articles || [];
-    let savedCount = 0;
-    
-    if (articles.length > 0) {
-      try {
-        const SheetsManager = require('../config/sheets');
-        const sheetsManager = new SheetsManager();
-        await sheetsManager.initialize();
-        const savedArticles = await sheetsManager.saveArticles(articles);
-        savedCount = savedArticles.length;
-        console.log(`💾 Saved ${savedCount} articles to sheets`);
-      } catch (sheetsError) {
-        console.error('⚠️ Failed to save to sheets:', sheetsError.message);
-      }
-    }
-    
-    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-    
-    res.json({
-      success: true,
-      message: 'Scraping completed successfully',
-      data: {
-        articlesFound: articles.length,
-        savedToSheets: savedCount,
-        duration: `${duration} seconds`,
-        timestamp: new Date().toISOString(),
-        sources: results.errors ? results.errors.length : 0,
-        errors: results.errors || []
-      }
-    });
-  } catch (error) {
-    console.error('❌ Scraping API error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
 // --- ARTICLES MANAGEMENT ---
 app.get('/api/articles', async (req, res) => {
   try {
@@ -805,6 +631,54 @@ app.get('/api/articles', async (req, res) => {
       data: articles,
       count: articles.length,
       total_unused: articles.filter(a => !a.used_in_issue || a.used_in_issue === '').length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- TEST EMAIL ---
+app.post('/api/test-email', async (req, res) => {
+  try {
+    const { email, type = 'simple', segment = 'pro' } = req.body;
+    const testRecipient = email || process.env.NEWSLETTER_RECIPIENTS?.split(',')[0];
+    
+    if (!testRecipient) {
+      return res.status(400).json({
+        success: false,
+        error: 'No test recipient provided'
+      });
+    }
+
+    const testData = {
+      html: `<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #1e40af;">SFP Newsletter System Test</h2>
+        <p>This is a test email from the Safe Freight Program newsletter automation system.</p>
+        <p><strong>Test Time:</strong> ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })}</p>
+        <p><strong>System Status:</strong> Email sending functionality is working correctly</p>
+        </body></html>`,
+      text: 'SFP Newsletter System Test - Email sending working correctly',
+      subject: 'SFP Newsletter System Test'
+    };
+    
+    const testSubscriber = { 
+      email: testRecipient, 
+      name: 'Test User',
+      segment: 'test'
+    };
+    
+    await emailSender.sendSingleEmail(testData, testSubscriber);
+    
+    res.json({
+      success: true,
+      message: 'Test email sent successfully',
+      data: {
+        recipient: testRecipient,
+        timestamp: new Date().toISOString()
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -870,6 +744,65 @@ app.get('/api/analytics/summary', async (req, res) => {
   }
 });
 
+// --- STATUS ENDPOINTS ---
+app.get('/api/status', async (req, res) => {
+  try {
+    const emailStatus = await emailSender.verifyConnection();
+    const subscriberTest = await emailSender.testEmailSystem();
+    res.json({
+      status: 'running',
+      version: '2.0.0',
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || 'production',
+      lastRestart: new Date().toISOString(),
+      services: {
+        email: {
+          configured: !!process.env.EMAIL_USER || !!process.env.RESEND_API_KEY,
+          connected: emailStatus,
+          subscribers: subscriberTest.totalSubscribers || 0
+        },
+        sheets: {
+          configured: !!process.env.GOOGLE_SHEETS_ID,
+          connected: subscriberTest.smtpWorking
+        },
+        openai: {
+          configured: !!process.env.OPENAI_API_KEY
+        }
+      },
+      currentTime: new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', error: error.message, timestamp: new Date().toISOString() });
+  }
+});
+
+app.get('/api/email-status', async (req, res) => {
+  try {
+    const connectionVerified = await emailSender.verifyConnection();
+    res.json({
+      success: true,
+      configuration: {
+        emailConfigured: !!process.env.EMAIL_USER || !!process.env.RESEND_API_KEY,
+        recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS,
+        connectionVerified,
+        smtpHost: process.env.EMAIL_HOST || 'smtp.gmail.com',
+        smtpPort: process.env.EMAIL_PORT || 587,
+        fromAddress: process.env.EMAIL_FROM || process.env.EMAIL_USER || 'Not configured',
+        environment: process.env.NODE_ENV || 'production'
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      configuration: { emailConfigured: !!process.env.EMAIL_USER, recipientsConfigured: !!process.env.NEWSLETTER_RECIPIENTS, connectionVerified: false },
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // --- SYSTEM CONFIGURATION ---
 app.get('/api/config', (req, res) => {
   res.json({
@@ -890,52 +823,32 @@ app.get('/api/config', (req, res) => {
         model: 'gpt-4o-mini'
       }
     }
+  });
 });
-});
-  
-// --- ADVANCED SCHEDULER (AUTOMATION) ---
-let scheduler;
-if (process.env.NODE_ENV === 'production') {
-  scheduler = new AdvancedScheduler();
-  scheduler.initialize();
-  setupAdvancedSchedulingEndpoints(app, scheduler);
-} else {
-  scheduler = {
-    getConfiguration: () => ({
-      schedules: {
-        scraping: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 16, minute: 45 },
-        newsletter: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 17, minute: 30 }
-      },
-      nextRuns: { scraping: 'Dev mode - disabled', newsletter: 'Dev mode - disabled' },
-      activeJobs: [],
-      dependencies: {}
-    }),
-    updateSchedule: () => { throw new Error('Scheduling not available in development mode'); },
-    triggerJob: async (jobType) => {
-      console.log(`🔧 Dev mode manual trigger: ${jobType}`);
-    }
+
+// --- DEBUG ENDPOINTS ---
+app.get('/api/debug', (req, res) => {
+  const debug = {
+    timestamp: new Date().toISOString(),
+    nodeEnv: process.env.NODE_ENV,
+    isProduction: process.env.NODE_ENV === 'production',
+    environment: {
+      hasOpenAI: !!process.env.OPENAI_API_KEY,
+      hasGoogleEmail: !!process.env.GOOGLE_CLIENT_EMAIL,
+      hasGoogleKey: !!process.env.GOOGLE_PRIVATE_KEY,
+      hasResendKey: !!process.env.RESEND_API_KEY,
+      hasSheetsId: !!process.env.GOOGLE_SHEETS_ID
+    },
+    memory: process.memoryUsage(),
+    modules: {}
   };
-  setupAdvancedSchedulingEndpoints(app, scheduler);
-}
-
-// --- 404 HANDLER ---
-app.use((req, res) => {
-  res.status(404).json({ success: false, error: 'Endpoint not found', timestamp: new Date().toISOString() });
-});
-
-// --- GRACEFUL SHUTDOWN ---
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
-
-// --- STARTUP ---
-app.listen(PORT, () => {
-  console.log(`SFP Newsletter Automation running on port ${PORT}`);
+  try {
+    const scraper = require('./scraper');
+    debug.modules.scraper = { available: true, exports: Object.keys(scraper) };
+  } catch (error) {
+    debug.modules.scraper = { available: false, error: error.message };
+  }
+  res.json(debug);
 });
 
 // --- SYSTEM TEST ENDPOINTS ---
@@ -1003,7 +916,6 @@ app.get('/api/test/connection', async (req, res) => {
   }
 });
 
-// Test newsletter generation without sending
 app.post('/api/test/newsletter', async (req, res) => {
   try {
     const { segment = 'pro' } = req.body;
@@ -1033,7 +945,6 @@ app.post('/api/test/newsletter', async (req, res) => {
   }
 });
 
-// Quick scraping test
 app.post('/api/test/scrape', async (req, res) => {
   try {
     console.log('🧪 Testing scraping system...');
@@ -1061,7 +972,6 @@ app.post('/api/test/scrape', async (req, res) => {
   }
 });
 
-// Environment check
 app.get('/api/test/env', (req, res) => {
   const env_check = {
     NODE_ENV: process.env.NODE_ENV || 'not set',
@@ -1079,4 +989,64 @@ app.get('/api/test/env', (req, res) => {
     success: true,
     environment: env_check
   });
-});        
+});
+
+// --- ADVANCED SCHEDULER (AUTOMATION) ---
+let scheduler;
+if (process.env.NODE_ENV === 'production') {
+  scheduler = new AdvancedScheduler();
+  scheduler.initialize();
+  setupAdvancedSchedulingEndpoints(app, scheduler);
+} else {
+  scheduler = {
+    getConfiguration: () => ({
+      schedules: {
+        scraping: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 16, minute: 45 },
+        newsletter: { enabled: false, frequency: 'weekly', dayOfWeek: 1, hour: 17, minute: 30 }
+      },
+      nextRuns: { scraping: 'Dev mode - disabled', newsletter: 'Dev mode - disabled' },
+      activeJobs: [],
+      dependencies: {}
+    }),
+    updateSchedule: () => { throw new Error('Scheduling not available in development mode'); },
+    triggerJob: async (jobType) => {
+      console.log(`🔧 Dev mode manual trigger: ${jobType}`);
+    }
+  };
+  setupAdvancedSchedulingEndpoints(app, scheduler);
+}
+
+// --- 404 HANDLER ---
+app.use((req, res) => {
+  res.status(404).json({ 
+    success: false, 
+    error: 'Endpoint not found', 
+    timestamp: new Date().toISOString(),
+    available_endpoints: [
+      'GET /',
+      'GET /health', 
+      'GET /admin',
+      'GET /api/version',
+      'POST /api/scrape',
+      'GET /api/status'
+    ]
+  });
+});
+
+// --- GRACEFUL SHUTDOWN ---
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
+
+// --- STARTUP ---
+app.listen(PORT, () => {
+  console.log(`✅ SFP Newsletter Automation running on port ${PORT}`);
+  console.log(`🌐 Admin Dashboard: http://localhost:${PORT}/admin`);
+  console.log(`📊 API Status: http://localhost:${PORT}/api/status`);
+  console.log(`🔧 Environment: ${process.env.NODE_ENV || 'production'}`);
+});
