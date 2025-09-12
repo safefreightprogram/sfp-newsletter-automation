@@ -880,7 +880,8 @@ app.get('/api/config', (req, res) => {
         model: 'gpt-4o-mini'
       }
     }
-
+});
+  
 // --- ADVANCED SCHEDULER (AUTOMATION) ---
 let scheduler;
 if (process.env.NODE_ENV === 'production') {
