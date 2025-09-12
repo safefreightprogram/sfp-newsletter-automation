@@ -68,6 +68,16 @@ app.get('/newsletter-management.html', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
 });
 
+app.get('/api/version', (req, res) => {
+  res.json({
+    success: true,
+    version: '2.0.0',
+    system: 'SFP Newsletter Automation',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'production'
+  });
+});
+
 // --- GLOBALS ---
 const emailSender = new EmailSender();
 let newsletterCache = new Map();
