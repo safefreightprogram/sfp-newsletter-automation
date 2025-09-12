@@ -750,9 +750,7 @@ buildComplianceNewsletterHTML(articles, segment) {
                     <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
                       <tr>
                         <td align="left" style="padding:0 0 8px 0;">
-                          <img src="https://sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png"
-                               width="60" alt="Safe Freight Program"
-                               style="display:block;border:0;outline:0;text-decoration:none;">
+                          <img src="//sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png" width="60" alt="Safe Freight Program" style="display:block;border:0;outline:0;text-decoration:none;">
                         </td>
                       </tr>
                       <tr>
