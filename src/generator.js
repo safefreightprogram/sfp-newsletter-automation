@@ -637,29 +637,31 @@ PRIORITY ORDER (most important first):
     }
   }
 
-  // ENHANCED: Newsletter HTML generation with logo and one-click unsubscribe links
+// ENHANCED: Newsletter HTML generation with email-safe hero header (table + inline styles)
 buildComplianceNewsletterHTML(articles, segment) {
   const isPro = (segment === 'pro');
   const color = '#1e40af'; // SFP blue
   const title = isPro ? 'COR Intel Weekly' : 'Safe Freight Mate';
   const subtitle = new Date().toLocaleDateString('en-AU', {
     weekday: 'long',
-    day: 'numeric', 
+    day: 'numeric',
     month: 'long',
     year: 'numeric'
   });
-  
+
   // Generate unique newsletter ID for tracking
   const newsletterId = `${segment}-${Date.now()}`;
-  
+
   // Generate article cards with proper category styling
   const articleCards = articles.map((article, index) => {
     const categoryStyle = this.getCategoryStyle(article.category);
-    
-    // With this tracked version:
-const issueId = `${segment}-${new Date().toISOString().split('T')[0]}`;
-const articleUrl = `${article.url}?utm_source=sfp_newsletter&utm_medium=email&utm_campaign=${issueId}&utm_content=article_${index + 1}&utm_term=${encodeURIComponent(article.category.toLowerCase().replace(/\s+/g, '_'))}`;
-    
+
+    // UTM tracked version
+    const issueId = `${segment}-${new Date().toISOString().split('T')[0]}`;
+    const articleUrl = `${article.url}?utm_source=sfp_newsletter&utm_medium=email&utm_campaign=${issueId}&utm_content=article_${index + 1}&utm_term=${encodeURIComponent(
+      article.category.toLowerCase().replace(/\s+/g, '_')
+    )}`;
+
     return `
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 35px;">
   <tr><td>
@@ -674,7 +676,7 @@ const articleUrl = `${article.url}?utm_source=sfp_newsletter&utm_medium=email&ut
     <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
       ${this.escapeHtml(article.summary)}
     </p>
-      <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color};">
+    <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color};">
       <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px;"><strong>Action Tip:</strong></p>
       <p style="margin: 0; color: #4b5563; font-size: 14px; line-height: 1.5;">${this.escapeHtml(article.tip)}</p>
     </div>
@@ -693,169 +695,175 @@ const articleUrl = `${article.url}?utm_source=sfp_newsletter&utm_medium=email&ut
     <div style="height: 1px; background-color: #e5e7eb;"></div>
   </td></tr>
 </table>`;
-    }).join('');
+  }).join('');
 
-    // ENHANCED: One-click unsubscribe links using GAS Web App system
-    const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec';
-    const unsubscribeUrl = `${gasWebAppUrl}?e=unsub&i={{ISSUE_ID}}&s=${segment}&t={{TOKEN}}`;
-    const pauseUrl = `${gasWebAppUrl}?e=pause&i={{ISSUE_ID}}&s=${segment}&t={{TOKEN}}`;
+  // One-click unsubscribe (GAS)
+  const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec';
+  const unsubscribeUrl = `${gasWebAppUrl}?e=unsub&i={{ISSUE_ID}}&s=${segment}&t={{TOKEN}}`;
+  const pauseUrl = `${gasWebAppUrl}?e=pause&i={{ISSUE_ID}}&s=${segment}&t={{TOKEN}}`;
 
-    // Mailto unsubscribe links for email client compatibility
-    const unsubscribeMailto = 'mailto:unsubscribe@safefreightprogram.com.au?subject=Unsubscribe Request';
-    const pauseMailto = 'mailto:pause@safefreightprogram.com.au?subject=Pause Newsletter';
+  // Mailto fallbacks
+  const unsubscribeMailto = 'mailto:unsubscribe@safefreightprogram.com.au?subject=Unsubscribe Request';
+  const pauseMailto = 'mailto:pause@safefreightprogram.com.au?subject=Pause Newsletter';
 
-    // Professional disclaimer
-    const disclaimer = isPro 
-      ? `<div style="background:#f3f4f6;padding:20px;margin:20px 0;border-radius:8px;border-left:4px solid #6b7280;">
-          <p style="color:#6b7280;font-size:11px;line-height:1.4;margin:0;font-style:italic;">
-            <strong>Disclaimer:</strong> This publication is for general information only and is not intended to be legal advice. You should seek your own professional advice before relying on the information provided.
-          </p>
-        </div>`
-      : `<div style="background:#f3f4f6;padding:20px;margin:20px 0;border-radius:8px;border-left:4px solid #6b7280;">
-          <p style="color:#6b7280;font-size:11px;line-height:1.4;margin:0;font-style:italic;">
-            <strong>Safety Note:</strong> This update is for general safety and compliance awareness. It's not legal advice. Always follow your company procedures and ask your supervisor or manager if you're unsure.
-          </p>
-        </div>`;
+  // Disclaimer
+  const disclaimer = isPro
+    ? `<div style="background:#f3f4f6;padding:20px;margin:20px 0;border-radius:8px;border-left:4px solid #6b7280;">
+         <p style="color:#6b7280;font-size:11px;line-height:1.4;margin:0;font-style:italic;">
+           <strong>Disclaimer:</strong> This publication is for general information only and is not intended to be legal advice. You should seek your own professional advice before relying on the information provided.
+         </p>
+       </div>`
+    : `<div style="background:#f3f4f6;padding:20px;margin:20px 0;border-radius:8px;border-left:4px solid #6b7280;">
+         <p style="color:#6b7280;font-size:11px;line-height:1.4;margin:0;font-style:italic;">
+           <strong>Safety Note:</strong> This update is for general safety and compliance awareness. It's not legal advice. Always follow your company procedures and ask your supervisor or manager if you're unsure.
+         </p>
+       </div>`;
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en-AU">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${this.escapeHtml(title)}</title>
-    <style>
-        @media only screen and (max-width: 600px) {
-            .mobile-padding { padding: 20px !important; }
-            .mobile-text { font-size: 16px !important; }
-            .mobile-header { font-size: 24px !important; }
-            .logo { width: 50px !important; height: 50px !important; }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light only">
+  <title>${this.escapeHtml(title)}</title>
+  <style>
+    @media only screen and (max-width: 600px) {
+      .mobile-padding { padding: 20px !important; }
+      .mobile-text { font-size: 16px !important; }
+      .mobile-header { font-size: 24px !important; }
+      .logo { width: 50px !important; height: 50px !important; }
+    }
+  </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-        <tr>
-            <td align="center" style="padding: 40px 20px;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-                    
-                    <!-- Header with Logo Above Title -->
-                    <tr>
-                        <td style="background: linear-gradient(135deg, ${color} 0%, #1e3a8a 100%); padding: 40px; text-align: center;">
-                            <!-- Logo above title - White version -->
-                            <!-- Logo above title - Base64 embedded -->
-<a href="https://www.safefreightprogram.com" target="_blank" style="text-decoration: none; display: block; margin-bottom: 20px;">
-    <img src="${SFP_LOGO_BASE64}" 
-         alt="Safe Freight Program Logo" 
-         style="width: 60px; height: 60px; display: block; margin: 0 auto; filter: brightness(0) invert(1);" 
-         class="logo">
-</a>
-                            
-                            <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: 700; letter-spacing: -0.025em;">
-                                ${this.escapeHtml(title)}
-                            </h1>
-                            <p style="margin: 8px 0 0 0; color: #bfdbfe; font-size: 16px; opacity: 0.9;">
-                                ${this.escapeHtml(subtitle)}
-                            </p>
+<body bgcolor="#FFFFFF" style="margin:0;padding:0;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+    <tr>
+      <td align="center" style="padding: 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width:600px;background-color:#ffffff;">
+          
+          <!-- ===== EMAIL-SAFE HERO ===== -->
+          <tr>
+            <td>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#1E40AF" style="background-color:#1E40AF;">
+                <tr>
+                  <td align="center" style="padding:28px 16px;">
+                    <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
+                      <tr>
+                        <td align="left" style="padding:0 0 8px 0;">
+                          <img src="https://sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png"
+                               width="60" alt="Safe Freight Program"
+                               style="display:block;border:0;outline:0;text-decoration:none;">
                         </td>
-                    </tr>
-                    
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 40px;" class="mobile-padding">
-                            ${articleCards}
-                            
-                            <!-- Share Button Only -->
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-top: 40px;">
-                              <tr><td style="text-align: center; padding: 20px;">
-                                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                                  <tr><td style="background-color: ${color}; border-radius: 6px;">
-                                    <a href="mailto:?subject=Recommended Newsletter: ${this.escapeHtml(title)}&body=Hi,%0A%0AI subscribe to ${this.escapeHtml(title)} and thought you might find it valuable too.%0A%0AYou can subscribe at:%0A%0Ahttps://www.safefreightprogram.com/subscribe.html%0A%0ACheers!"
- 
-                                       style="display: inline-block; padding: 14px 28px; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
-                                      ${isPro ? 'Recommend COR Intel Weekly to a Colleague' : 'Share with a Mate'} →
-                                    </a>
-                                  </td></tr>
-                                </table>
-                              </td></tr>
-                            </table>
+                      </tr>
+                      <tr>
+                        <td align="left" style="font:700 32px/1.2 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#FFFFFF;">
+                          ${this.escapeHtml(title)}
                         </td>
-                    </tr>
-                    
-                    <!-- Disclaimer -->
-                    <tr>
-                        <td style="padding: 0 40px;">
-                            ${disclaimer}
+                      </tr>
+                      <tr>
+                        <td align="left" style="font:400 16px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#DBEAFE;padding-top:6px;">
+                          ${this.escapeHtml(subtitle)}
                         </td>
-                    </tr>
-                    
-                    <!-- Australian Spam Act Compliance -->
-                    <tr>
-                        <td style="padding: 20px 40px; background-color: #f8fafc; border-top: 1px solid #e5e7eb;">
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                                <tr>
-                                    <td style="text-align: center;">
-                                        <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 12px; line-height: 1.4;">
-                                            You received this email because you subscribed to ${this.escapeHtml(title)}.<br>
-                                            Safe Freight Program<br>
-                                            Parcel Locker 1017149451, 326 King Street NEWTOWN NSW 2042
-                                        </p>
-                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
-                                            <tr>
-                                                <td style="padding: 0 8px;">
-                                                    <a href="${pauseUrl}" style="color: #6b7280; font-size: 12px; text-decoration: underline;">
-                                                        Pause newsletters
-                                                    </a>
-                                                </td>
-                                                <td style="padding: 0 8px; color: #d1d5db;">|</td>
-                                                <td style="padding: 0 8px;">
-                                                    <a href="${unsubscribeUrl}" style="color: #6b7280; font-size: 12px; text-decoration: underline;">
-                                                        Unsubscribe
-                                                    </a>
-                                                </td>
-                                                <td style="padding: 0 8px; color: #d1d5db;">|</td>
-                                                <td style="padding: 0 8px;">
-                                                    <a href="${unsubscribeMailto}" style="color: #6b7280; font-size: 12px; text-decoration: underline;">
-                                                        Email unsubscribe
-                                                    </a>
-                                                </td>
-                                            </tr>
-                                        </table>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                    
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background-color: #f9fafb; padding: 32px 40px; border-top: 1px solid #e5e7eb;">
-                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                                <tr>
-                                    <td style="text-align: center; padding-bottom: 20px;">
-                                        <h3 style="margin: 0 0 8px 0; color: ${color}; font-size: 18px; font-weight: 600;">
-                                            Safe Freight Program
-                                        </h3>
-                                        <p style="margin: 0; color: #6b7280; font-size: 14px;">
-                                            Heavy Vehicle Compliance
-                                        </p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="text-align: center; padding: 16px 0; color: #9ca3af; font-size: 12px;">
-                                        <p style="margin: 0;">© ${new Date().getFullYear()} Safe Freight Program. All rights reserved.</p>
-                                        <p style="margin: 8px 0 0 0;">This email complies with the Australian Spam Act 2003</p>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                </table>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
             </td>
-        </tr>
-    </table>
+          </tr>
+          <!-- ===== END HERO ===== -->
+
+          <!-- CONTENT WRAPPER -->
+          <tr>
+            <td style="padding: 24px;" class="mobile-padding">
+              ${articleCards}
+
+              <!-- Share Button -->
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-top: 10px;">
+                <tr><td style="text-align: center; padding: 20px;">
+                  <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                    <tr><td style="background-color: ${color}; border-radius: 6px;">
+                      <a href="mailto:?subject=Recommended Newsletter: ${this.escapeHtml(title)}&body=Hi,%0A%0AI subscribe to ${this.escapeHtml(title)} and thought you might find it valuable too.%0A%0AYou can subscribe at:%0A%0Ahttps://www.safefreightprogram.com/subscribe.html%0A%0ACheers!"
+                         style="display: inline-block; padding: 14px 28px; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
+                        ${isPro ? 'Recommend COR Intel Weekly to a Colleague' : 'Share with a Mate'} →
+                      </a>
+                    </td></tr>
+                  </table>
+                </td></tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Disclaimer -->
+          <tr>
+            <td style="padding: 0 24px;">
+              ${disclaimer}
+            </td>
+          </tr>
+
+          <!-- Spam Act compliance -->
+          <tr>
+            <td style="padding: 20px 24px; background-color: #f8fafc; border-top: 1px solid #e5e7eb;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <td style="text-align: center;">
+                    <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 12px; line-height: 1.4;">
+                      You received this email because you subscribed to ${this.escapeHtml(title)}.<br>
+                      Safe Freight Program<br>
+                      Parcel Locker 1017149451, 326 King Street NEWTOWN NSW 2042
+                    </p>
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin: 0 auto;">
+                      <tr>
+                        <td style="padding: 0 8px;">
+                          <a href="${pauseUrl}" style="color: #6b7280; font-size: 12px; text-decoration: underline;">Pause newsletters</a>
+                        </td>
+                        <td style="padding: 0 8px; color: #d1d5db;">|</td>
+                        <td style="padding: 0 8px;">
+                          <a href="${unsubscribeUrl}" style="color: #6b7280; font-size: 12px; text-decoration: underline;">Unsubscribe</a>
+                        </td>
+                        <td style="padding: 0 8px; color: #d1d5db;">|</td>
+                        <td style="padding: 0 8px;">
+                          <a href="${unsubscribeMailto}" style="color: #6b7280; font-size: 12px; text-decoration: underline;">Email unsubscribe</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 24px; border-top: 1px solid #e5e7eb;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <td style="text-align: center; padding-bottom: 12px;">
+                    <h3 style="margin: 0 0 8px 0; color: ${color}; font-size: 18px; font-weight: 600;">
+                      Safe Freight Program
+                    </h3>
+                    <p style="margin: 0; color: #6b7280; font-size: 14px;">
+                      Heavy Vehicle Compliance
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="text-align: center; padding: 8px 0; color: #9ca3af; font-size: 12px;">
+                    <p style="margin: 0;">© ${new Date().getFullYear()} Safe Freight Program. All rights reserved.</p>
+                    <p style="margin: 8px 0 0 0;">This email complies with the Australian Spam Act 2003</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
-  }
+}
 
   // ENHANCED: Category styling with proper priority colors
   getCategoryStyle(category) {
