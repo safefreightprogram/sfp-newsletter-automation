@@ -57,15 +57,15 @@ app.use(express.static('public'));
 
 // --- SPECIFIC ROUTES FOR ADMIN DASHBOARD ---
 app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
+  res.sendFile(path.join(__dirname, '../newsletter-management.html'));
 });
 
 app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
+  res.sendFile(path.join(__dirname, '../newsletter-management.html'));
 });
 
 app.get('/newsletter-management.html', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
+  res.sendFile(path.join(__dirname, '../newsletter-management.html'));
 });
 
 // --- GLOBALS ---
