@@ -40,7 +40,33 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use('/static', express.static('public', {
+  setHeaders: (res, path, stat) => {
+    if (path.endsWith('.css')) {
+      res.set('Content-Type', 'text/css; charset=utf-8');
+    } else if (path.endsWith('.js')) {
+      res.set('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (path.endsWith('.html')) {
+      res.set('Content-Type', 'text/html; charset=utf-8');
+    }
+  }
+}));
+
+// Serve public files directly at root as well (for backward compatibility)
 app.use(express.static('public'));
+
+// --- SPECIFIC ROUTE FOR ADMIN DASHBOARD ---
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
+});
+
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
+});
+
+app.get('/newsletter-management.html', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/newsletter-management.html'));
+});
 
 // --- GLOBALS ---
 const emailSender = new EmailSender();
@@ -567,6 +593,294 @@ app.get('/api/debug', (req, res) => {
   res.json(debug);
 });
 
+// --- API VERSION ENDPOINT ---
+app.get('/api/version', (req, res) => {
+  res.json({
+    success: true,
+    version: '2.0.0',
+    system: 'SFP Newsletter Automation',
+    timestamp: new Date().toISOString(),
+    build: process.env.RAILWAY_GIT_COMMIT_SHA || 'local',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// --- NEWSLETTER MANAGEMENT ENDPOINTS ---
+app.get('/api/newsletters', async (req, res) => {
+  try {
+    // Get recent newsletters from Content_Archive sheet
+    const { google } = require('googleapis');
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Content_Archive!A:J',
+    });
+    
+    const rows = response.data.values || [];
+    const newsletters = rows.slice(1, 21).map(row => ({ // Get last 20 newsletters
+      id: row[0] || '',
+      segment: row[1] || '',
+      subject: row[2] || '',
+      published_at: row[3] || '',
+      sent_count: parseInt(row[4]) || 0,
+      open_rate: parseFloat(row[6]) || 0,
+      click_rate: parseFloat(row[7]) || 0
+    }));
+    
+    res.json({
+      success: true,
+      data: newsletters,
+      count: newsletters.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.post('/api/newsletters/send', async (req, res) => {
+  try {
+    const { segment, testEmail } = req.body;
+    
+    if (!['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid segment. Must be "pro" or "driver"'
+      });
+    }
+    
+    const newsletterGenerator = new NewsletterGenerator();
+    
+    if (testEmail) {
+      // Send test email only
+      const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
+      const testSubscriber = { 
+        email: testEmail, 
+        name: 'Test User',
+        segment: segment
+      };
+      
+      await emailSender.sendSingleEmail(newsletter, testSubscriber);
+      
+      return res.json({
+        success: true,
+        message: 'Test newsletter sent successfully',
+        data: {
+          segment: segment,
+          recipient: testEmail,
+          subject: newsletter.subject
+        }
+      });
+    } else {
+      // Send to all subscribers
+      const newsletter = await newsletterGenerator.generateNewsletter(segment, true);
+      
+      return res.json({
+        success: true,
+        message: 'Newsletter sent to all subscribers',
+        data: {
+          segment: segment,
+          subject: newsletter.subject,
+          emailSending: newsletter.emailSending
+        }
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- ENHANCED SCRAPING ENDPOINT ---
+app.post('/api/scrape', async (req, res) => {
+  try {
+    const { sources } = req.body; // Optional: specific sources to scrape
+    const startTime = Date.now();
+    
+    console.log('🔍 Manual scraping triggered via API...');
+    
+    const results = await scrapeAllSources();
+    const articles = results.articles || [];
+    let savedCount = 0;
+    
+    if (articles.length > 0) {
+      try {
+        const SheetsManager = require('../config/sheets');
+        const sheetsManager = new SheetsManager();
+        await sheetsManager.initialize();
+        const savedArticles = await sheetsManager.saveArticles(articles);
+        savedCount = savedArticles.length;
+        console.log(`💾 Saved ${savedCount} articles to sheets`);
+      } catch (sheetsError) {
+        console.error('⚠️ Failed to save to sheets:', sheetsError.message);
+      }
+    }
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    
+    res.json({
+      success: true,
+      message: 'Scraping completed successfully',
+      data: {
+        articlesFound: articles.length,
+        savedToSheets: savedCount,
+        duration: `${duration} seconds`,
+        timestamp: new Date().toISOString(),
+        sources: results.errors ? results.errors.length : 0,
+        errors: results.errors || []
+      }
+    });
+  } catch (error) {
+    console.error('❌ Scraping API error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// --- ARTICLES MANAGEMENT ---
+app.get('/api/articles', async (req, res) => {
+  try {
+    const { limit = 50, unused_only = false } = req.query;
+    
+    const { google } = require('googleapis');
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Article_Archive!A:P',
+    });
+    
+    const rows = response.data.values || [];
+    const headers = rows[0] || [];
+    
+    let articles = rows.slice(1, parseInt(limit) + 1).map(row => {
+      const article = {};
+      headers.forEach((header, index) => {
+        article[header.toLowerCase().replace(/\s+/g, '_')] = row[index] || '';
+      });
+      return article;
+    });
+    
+    // Filter for unused articles if requested
+    if (unused_only === 'true') {
+      articles = articles.filter(article => 
+        !article.used_in_issue || article.used_in_issue === ''
+      );
+    }
+    
+    res.json({
+      success: true,
+      data: articles,
+      count: articles.length,
+      total_unused: articles.filter(a => !a.used_in_issue || a.used_in_issue === '').length
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- ANALYTICS ENDPOINTS ---
+app.get('/api/analytics/summary', async (req, res) => {
+  try {
+    const subscriberData = await emailSender.testEmailSystem();
+    
+    // Get recent newsletters count
+    const { google } = require('googleapis');
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Content_Archive!A:J',
+    });
+    
+    const newsletterRows = response.data.values || [];
+    const recentNewsletters = newsletterRows.slice(1, 11); // Last 10
+    
+    const summary = {
+      subscribers: {
+        total: subscriberData.totalSubscribers || 0,
+        pro: subscriberData.proSubscribers || 0,
+        driver: subscriberData.driverSubscribers || 0
+      },
+      newsletters: {
+        total_sent: recentNewsletters.length,
+        last_sent: recentNewsletters.length > 0 ? recentNewsletters[0][3] : null,
+        average_open_rate: recentNewsletters.length > 0 ? 
+          (recentNewsletters.reduce((sum, row) => sum + (parseFloat(row[6]) || 0), 0) / recentNewsletters.length).toFixed(2) : 0
+      },
+      system: {
+        status: 'operational',
+        last_scrape: new Date().toISOString(),
+        email_configured: subscriberData.smtpWorking || false
+      }
+    };
+    
+    res.json({
+      success: true,
+      data: summary,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// --- SYSTEM CONFIGURATION ---
+app.get('/api/config', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      scheduling: scheduler.getConfiguration(),
+      email: {
+        configured: !!process.env.RESEND_API_KEY || !!process.env.EMAIL_USER,
+        provider: process.env.RESEND_API_KEY ? 'resend' : 'gmail',
+        from_address: process.env.EMAIL_FROM || 'newsletter@safefreightprogram.com'
+      },
+      sheets: {
+        configured: !!process.env.GOOGLE_SHEETS_ID,
+        spreadsheet_id: process.env.GOOGLE_SHEETS_ID ? '✓ Connected' : '✗ Not configured'
+      },
+      openai: {
+        configured: !!process.env.OPENAI_API_KEY,
+        model: 'gpt-4o-mini'
+      }
+    }
+
 // --- ADVANCED SCHEDULER (AUTOMATION) ---
 let scheduler;
 if (process.env.NODE_ENV === 'production') {
@@ -611,3 +925,146 @@ process.on('SIGINT', () => {
 app.listen(PORT, () => {
   console.log(`SFP Newsletter Automation running on port ${PORT}`);
 });
+
+// --- SYSTEM TEST ENDPOINTS ---
+app.get('/api/test/connection', async (req, res) => {
+  const tests = {};
+  
+  try {
+    // Test Google Sheets connection
+    tests.sheets = {
+      configured: !!process.env.GOOGLE_SHEETS_ID,
+      spreadsheet_id: process.env.GOOGLE_SHEETS_ID || null
+    };
+    
+    if (process.env.GOOGLE_CLIENT_EMAIL) {
+      try {
+        const { google } = require('googleapis');
+        const auth = await google.auth.getClient({
+          credentials: {
+            client_email: process.env.GOOGLE_CLIENT_EMAIL,
+            private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+          },
+          scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+        });
+        
+        const sheets = google.sheets({ version: 'v4', auth });
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+          range: 'Subscribers!A1:A1',
+        });
+        
+        tests.sheets.connected = true;
+        tests.sheets.test_result = 'Successfully accessed spreadsheet';
+      } catch (error) {
+        tests.sheets.connected = false;
+        tests.sheets.error = error.message;
+      }
+    }
+    
+    // Test email system
+    try {
+      const emailTest = await emailSender.testEmailSystem();
+      tests.email = emailTest;
+    } catch (error) {
+      tests.email = { error: error.message };
+    }
+    
+    // Test OpenAI
+    tests.openai = {
+      configured: !!process.env.OPENAI_API_KEY,
+      api_key_present: process.env.OPENAI_API_KEY ? true : false
+    };
+    
+    res.json({
+      success: true,
+      tests: tests,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      tests: tests
+    });
+  }
+});
+
+// Test newsletter generation without sending
+app.post('/api/test/newsletter', async (req, res) => {
+  try {
+    const { segment = 'pro' } = req.body;
+    
+    console.log(`🧪 Testing newsletter generation for ${segment} segment...`);
+    
+    const newsletterGenerator = new NewsletterGenerator();
+    const newsletter = await newsletterGenerator.generateNewsletter(segment, false); // false = don't send
+    
+    res.json({
+      success: true,
+      message: 'Newsletter generated successfully (not sent)',
+      data: {
+        segment: segment,
+        subject: newsletter.subject,
+        articles_count: newsletter.articles?.length || 0,
+        html_length: newsletter.html?.length || 0,
+        filename: newsletter.filename || null
+      }
+    });
+  } catch (error) {
+    console.error('Newsletter test failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Quick scraping test
+app.post('/api/test/scrape', async (req, res) => {
+  try {
+    console.log('🧪 Testing scraping system...');
+    
+    const startTime = Date.now();
+    const results = await scrapeAllSources();
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    
+    res.json({
+      success: true,
+      message: 'Scraping test completed',
+      data: {
+        articles_found: results.articles?.length || 0,
+        duration: `${duration} seconds`,
+        errors: results.errors?.length || 0,
+        sample_titles: results.articles?.slice(0, 3).map(a => a.title) || []
+      }
+    });
+  } catch (error) {
+    console.error('Scraping test failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Environment check
+app.get('/api/test/env', (req, res) => {
+  const env_check = {
+    NODE_ENV: process.env.NODE_ENV || 'not set',
+    GOOGLE_SHEETS_ID: process.env.GOOGLE_SHEETS_ID ? '✓ Set' : '✗ Missing',
+    GOOGLE_CLIENT_EMAIL: process.env.GOOGLE_CLIENT_EMAIL ? '✓ Set' : '✗ Missing',
+    GOOGLE_PRIVATE_KEY: process.env.GOOGLE_PRIVATE_KEY ? '✓ Set' : '✗ Missing',
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✓ Set' : '✗ Missing',
+    RESEND_API_KEY: process.env.RESEND_API_KEY ? '✓ Set (Resend)' : '✗ Missing',
+    EMAIL_USER: process.env.EMAIL_USER ? '✓ Set (Gmail)' : '✗ Missing',
+    NEWSLETTER_RECIPIENTS: process.env.NEWSLETTER_RECIPIENTS ? '✓ Set' : '✗ Missing',
+    timestamp: new Date().toISOString()
+  };
+  
+  res.json({
+    success: true,
+    environment: env_check
+  });
+});        
