@@ -881,6 +881,7 @@ app.get('/api/config', (req, res) => {
       }
     }
 });
+});
   
 // --- ADVANCED SCHEDULER (AUTOMATION) ---
 let scheduler;
