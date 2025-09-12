@@ -588,6 +588,96 @@ app.delete('/api/subscribers/:email', async (req, res) => {
   }
 });
 
+// --- COMPATIBILITY ALIASES FOR FRONTEND ---
+
+// Alias: POST /api/newsletter/test  -> existing send flow as 'test'
+app.post('/api/newsletter/test', async (req, res) => {
+  try {
+    const { segment = 'pro', email } = req.body || {};
+    if (!email) return res.status(400).json({ success:false, error:'Missing email' });
+
+    // Reuse existing "generate-and-send" test path
+    const NewsletterGenerator = require('./generator');
+    const EmailSender = require('./emailSender');
+    const newsletterGenerator = new NewsletterGenerator();
+    const emailSender = new EmailSender();
+
+    const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
+    await emailSender.sendSingleEmail(newsletter, { email, name: 'Test User', segment });
+    return res.json({ success:true, message:'Test email sent', data:{ segment, email, subject: newsletter.subject }});
+  } catch (e) {
+    return res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+// New: GET /api/subscribers/csv
+app.get('/api/subscribers/csv', async (req, res) => {
+  try {
+    const SheetsManager = require('./config/sheets');
+    const sheetsManager = new SheetsManager();
+    await sheetsManager.initialize();
+
+    const seg = req.query.segment || ''; // optional
+    const list = await sheetsManager.getSubscribers(seg); // assumes existing helper
+    const cols = ['email','name','segment','company','role','status'];
+    const header = cols.join(',');
+    const rows = list.map(s => cols.map(c => `"${(s[c] ?? '').toString().replace(/"/g,'""')}"`).join(','));
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="subscribers.csv"');
+    return res.send([header, ...rows].join('\n'));
+  } catch (e) {
+    return res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+// Singular subscriber routes expected by the frontend:
+// GET /api/subscriber/:id  (id is email for now)
+// PUT /api/subscriber/:id
+// DELETE /api/subscriber/:id
+app.get('/api/subscriber/:id', async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.id);
+    const SheetsManager = require('./config/sheets');
+    const sheetsManager = new SheetsManager();
+    await sheetsManager.initialize();
+    const s = await sheetsManager.getSubscriberByEmail(email);
+    if (!s) return res.status(404).json({ success:false, error:'Not found' });
+    return res.json({ success:true, subscriber: s });
+  } catch (e) {
+    return res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+app.put('/api/subscriber/:id', async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.id);
+    const payload = req.body || {};
+    const SheetsManager = require('./config/sheets');
+    const sheetsManager = new SheetsManager();
+    await sheetsManager.initialize();
+    const updated = await sheetsManager.updateSubscriberByEmail(email, payload);
+    return res.json({ success:true, subscriber: updated });
+  } catch (e) {
+    return res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+app.delete('/api/subscriber/:id', async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.id);
+    // Reuse existing delete handler semantics
+    const SheetsManager = require('./config/sheets');
+    const sheetsManager = new SheetsManager();
+    await sheetsManager.initialize();
+    await sheetsManager.deleteSubscriberByEmail(email);
+    return res.json({ success:true });
+  } catch (e) {
+    return res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+
 // --- ARTICLES MANAGEMENT ---
 app.get('/api/articles', async (req, res) => {
   try {
