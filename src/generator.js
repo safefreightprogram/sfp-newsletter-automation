@@ -606,10 +606,27 @@ PRIORITY ORDER (most important first):
       return processedContent;
       
     } catch (error) {
-      console.error('OpenAI processing error:', error.message);
-      
-      // Enhanced fallback with URL protection
-      return articles.map(article => ({
+  console.error('❌ OpenAI processing error details:');
+  console.error('   Error type:', error.constructor.name);
+  console.error('   Error message:', error.message);
+  console.error('   API Key present:', !!process.env.OPENAI_API_KEY);
+  console.error('   API Key format:', process.env.OPENAI_API_KEY?.substring(0, 7) + '...');
+  
+  // Log HTTP-specific errors
+  if (error.response) {
+    console.error('   HTTP Status:', error.response.status);
+    console.error('   HTTP Data:', error.response.data);
+  }
+  
+  // Log OpenAI-specific errors
+  if (error.error) {
+    console.error('   OpenAI Error:', error.error);
+  }
+  
+  console.error('   Full error object:', JSON.stringify(error, null, 2));
+  
+  // Enhanced fallback with URL protection
+  return articles.map(article => ({
         id: article.id,
         title: article.title,
         summary: this.generateFallbackSummary(article, segment),
