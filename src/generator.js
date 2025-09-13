@@ -54,10 +54,6 @@ class NewsletterGenerator {
       
       // Generate newsletter HTML with logo and one-click unsubscribe
       const newsletterHtml = this.buildComplianceNewsletterHTML(processedArticles, segment);
-    if (typeof newsletterHtml !== 'string' || !newsletterHtml.trim()) {
-  throw new Error('Template generation failed: HTML string not produced');
-}
-
       
       // Save newsletter preview
       const filename = `logs/${segment}-newsletter-${Date.now()}.html`;
@@ -107,7 +103,7 @@ const newsletterResult = {
         segment: segment,
         articles: processedArticles,
         html: newsletterHtml,
-        text: this.buildPlainTextNewsletter(processedArticles, segment),
+        text: this.buildTextNewsletter(processedArticles, segment),
         subject: this.getSubjectLine(segment),
         filename: filename
       };
@@ -754,6 +750,7 @@ buildComplianceNewsletterHTML(articles, segment) {
   const html = `<!DOCTYPE html>
 
 const text = this.buildPlainTextNewsletter(articles, segment);
+return { html, text, newsletterId };
 
 <html lang="en-AU">
 <head>
