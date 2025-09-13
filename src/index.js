@@ -56,8 +56,16 @@ app.use('/static', express.static('public', {
   }
 }));
 
-// Serve public files directly at root as well (for backward compatibility)
-app.use(express.static('assets'));
+// Serve assets files directly at root as well (for backward compatibility)
+app.use(express.static('assets', {
+  setHeaders: (res, path, stat) => {
+    if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.gif') || path.endsWith('.svg')) {
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Methods', 'GET');
+      res.set('Cache-Control', 'public, max-age=31536000');
+    }
+  }
+}));
 
 // --- SPECIFIC ROUTES FOR ADMIN DASHBOARD ---
 app.get('/admin', (req, res) => {
