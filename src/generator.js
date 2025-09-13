@@ -637,34 +637,6 @@ PRIORITY ORDER (most important first):
     }
   }
 
-buildPlainTextNewsletter(articles, segment) {
-  const isPro = (segment === 'pro');
-  const title = isPro ? 'COR Intel Weekly' : 'Safe Freight Mate';
-  const date  = new Date().toLocaleDateString('en-AU', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  });
-
-  const lines = [];
-  lines.push(title);
-  lines.push(date);
-  lines.push('='.repeat(60), '');
-
-  articles.forEach((a, i) => {
-    lines.push(`[${a.category}] ${a.title}`);
-    if (a.summary) lines.push(a.summary);
-    if (a.tip)     lines.push(`Tip: ${a.tip}`);
-    if (a.source)  lines.push(`Source: ${a.source}`);
-    if (a.url)     lines.push(a.url);
-    lines.push('');
-  });
-
-  lines.push('—');
-  lines.push('Pause: https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec?e=pause');
-  lines.push('Unsubscribe: https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec?e=unsub');
-
-  return lines.join('\n');
-}
-  
 // ENHANCED: Newsletter HTML generation with email-safe hero header (table + inline styles)
 buildComplianceNewsletterHTML(articles, segment) {
   const isPro = (segment === 'pro');
@@ -747,11 +719,7 @@ buildComplianceNewsletterHTML(articles, segment) {
          </p>
        </div>`;
 
-  const html = `<!DOCTYPE html>
-
-const text = this.buildPlainTextNewsletter(articles, segment);
-return { html, text, newsletterId };
-
+  return `<!DOCTYPE html>
 <html lang="en-AU">
 <head>
   <meta charset="UTF-8">
@@ -781,17 +749,17 @@ return { html, text, newsletterId };
                   <td align="center" style="padding:28px 16px;">
                     <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
                       <tr>
-                        <td align="center" style="padding:0 0 8px 0;">
+                        <td align="left" style="padding:0 0 8px 0;">
                           <img src="//sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png" width="60" alt="Safe Freight Program" style="display:block;border:0;outline:0;text-decoration:none;">
                         </td>
                       </tr>
                       <tr>
-                        <td align="center" style="font:700 32px/1.2 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#FFFFFF;">
+                        <td align="left" style="font:700 32px/1.2 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#FFFFFF;">
                           ${this.escapeHtml(title)}
                         </td>
                       </tr>
                       <tr>
-                        <td align="center" style="font:400 16px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#DBEAFE;padding-top:6px;">
+                        <td align="left" style="font:400 16px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#DBEAFE;padding-top:6px;">
                           ${this.escapeHtml(subtitle)}
                         </td>
                       </tr>
