@@ -766,20 +766,20 @@ buildComplianceNewsletterHTML(articles, segment) {
                   <td align="center" style="padding:28px 16px;">
                     <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
                       <tr>
-                        <td align="left" style="padding:0 0 8px 0;">
-                          <img src="https://sfp-newsletter-automation-production.up.railway.app/assets/sfp-logo-small.png" width="60" alt="Safe Freight Program" style="display:block;border:0;outline:0;text-decoration:none;">
-                        </td>
-                      </tr>
-                      <tr>
-                        <td align="left" style="font:700 32px/1.2 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#FFFFFF;">
-                          ${this.escapeHtml(title)}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td align="left" style="font:400 16px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#DBEAFE;padding-top:6px;">
-                          ${this.escapeHtml(subtitle)}
-                        </td>
-                      </tr>
+  <td align="center" style="padding:0 0 8px 0;">
+    <img src="https://sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png" width="60" alt="Safe Freight Program" style="display:block;border:0;outline:0;text-decoration:none;margin:0 auto;">
+  </td>
+</tr>
+<tr>
+  <td align="center" style="font:700 32px/1.2 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#FFFFFF;">
+    ${this.escapeHtml(title)}
+  </td>
+</tr>
+<tr>
+  <td align="center" style="font:400 16px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#DBEAFE;padding-top:6px;">
+    ${this.escapeHtml(subtitle)}
+  </td>
+</tr>
                     </table>
                   </td>
                 </tr>
