@@ -53,7 +53,7 @@ app.use('/static', express.static('public', {
 }));
 
 // Serve public files directly at root as well (for backward compatibility)
-app.use(express.static('public'));
+app.use(express.static('assets'));
 
 // --- SPECIFIC ROUTES FOR ADMIN DASHBOARD ---
 app.get('/admin', (req, res) => {
