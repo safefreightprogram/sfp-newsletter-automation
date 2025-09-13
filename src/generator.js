@@ -748,9 +748,6 @@ buildComplianceNewsletterHTML(articles, segment) {
        </div>`;
 
   const html = `<!DOCTYPE html>
-<html lang="en-AU">
-  <!-- (everything you already have in this template) -->
-</html>`;
 
 const text = this.buildPlainTextNewsletter(articles, segment);
 return { html, text, newsletterId };
