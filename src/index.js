@@ -1105,6 +1105,48 @@ if (process.env.NODE_ENV === 'production') {
   };
   setupAdvancedSchedulingEndpoints(app, scheduler);
 }
+// --- DEBUG ENDPOINT ---
+app.get('/api/debug/openai', async (req, res) => {
+  console.log('🧪 Testing OpenAI API directly...');
+  
+  try {
+    const OpenAI = require('openai');
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+    
+    console.log('📝 API Key present:', !!process.env.OPENAI_API_KEY);
+    console.log('📝 API Key format:', process.env.OPENAI_API_KEY?.substring(0, 7) + '...');
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'Reply with just "API WORKING"' }],
+      max_tokens: 10
+    });
+    
+    console.log('✅ OpenAI Response:', response.choices[0].message.content);
+    
+    res.json({
+      success: true,
+      message: 'OpenAI API is working',
+      response: response.choices[0].message.content,
+      apiKeyPresent: !!process.env.OPENAI_API_KEY
+    });
+    
+  } catch (error) {
+    console.error('❌ OpenAI Test Error:', error.message);
+    console.error('❌ Error Type:', error.constructor.name);
+    
+    res.json({
+      success: false,
+      error: error.message,
+      errorType: error.constructor.name,
+      apiKeyPresent: !!process.env.OPENAI_API_KEY,
+      httpStatus: error.response?.status,
+      httpData: error.response?.data
+    });
+  }
+});
 
 // --- 404 HANDLER ---
 app.use((req, res) => {
