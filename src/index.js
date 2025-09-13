@@ -48,6 +48,10 @@ app.use('/static', express.static('public', {
       res.set('Content-Type', 'application/javascript; charset=utf-8');
     } else if (path.endsWith('.html')) {
       res.set('Content-Type', 'text/html; charset=utf-8');
+    } else if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.gif') || path.endsWith('.svg')) {
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Methods', 'GET');
+      res.set('Cache-Control', 'public, max-age=31536000');
     }
   }
 }));
