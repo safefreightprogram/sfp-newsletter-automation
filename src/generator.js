@@ -743,6 +743,20 @@ const formattedDate = date.toLocaleDateString('en-AU', {
     <h2 style="margin: 12px 0 8px 0; color: ${SFP_BRAND.colors.dark}; font-size: ${SFP_BRAND.typography.sizes.h2}; font-weight: 700; line-height: 1.3; font-family: ${SFP_BRAND.typography.primary}; text-align:left;">
   ${this.escapeHtml(article.title)}
 </h2>
+<!-- Date (under title, no source) -->
+<div style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+  ${(() => {
+    const iso = article.publishedAt || article.pubDate || '';
+    if (!iso) return 'Published recently';
+    const dt = new Date(iso);
+    const long = dt.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const now = new Date();
+    const diff = now - dt;
+    const s = Math.round(diff/1000), m = Math.round(s/60), h = Math.round(m/60), d = Math.round(h/24);
+    const rel = s < 60 ? `${s}s ago` : (m < 60 ? `${m}m ago` : (h < 24 ? `${h}h ago` : `${d}d ago`));
+    return `${long} (${rel})`;
+  })()}
+</div>
 
 
     <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
@@ -830,12 +844,6 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 <tr>
   <td align="center" style="font: 700 ${SFP_BRAND.typography.sizes.h1}/1.2 ${SFP_BRAND.typography.primary}; color: #FFFFFF; padding: 0 0 8px 0;">
     ${this.escapeHtml(SFP_BRAND.newsletters[segment].title)}
-  </td>
-</tr>
-<!-- Tagline -->
-<tr>
-  <td align="center" style="font: 400 14px/1.4 ${SFP_BRAND.typography.primary}; color: ${SFP_BRAND.colors.blue100}; padding: 0 0 8px 0;">
-    ${this.escapeHtml(SFP_BRAND.newsletters[segment].tagline)}
   </td>
 </tr>
 <!-- Date -->
