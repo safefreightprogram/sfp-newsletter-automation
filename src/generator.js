@@ -848,7 +848,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
      width="${SFP_BRAND.logo.width}" 
      height="${SFP_BRAND.logo.height}" 
      alt="${SFP_BRAND.logo.alt}" 
-     style="display:block; border:0; outline:none; text-decoration:none; margin:0 auto;" class="logo">
+     style="display:block; border:0; outline:none; text-decoration:none; margin:0 auto;">
   </td>
 </tr>
 <!-- Newsletter Title -->
