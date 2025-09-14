@@ -741,6 +741,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
       </td></tr>
     </table>
     <h2 style="margin: 12px 0 8px 0; color: ${SFP_BRAND.colors.dark}; font-size: ${SFP_BRAND.typography.sizes.h2}; font-weight: 700; line-height: 1.3; font-family: ${SFP_BRAND.typography.primary}; text-align:left;">
+<td style="font-size:20px; line-height:1.4; font-weight:bold; color:#111827;">
   ${this.escapeHtml(article.title)}
 </h2>
 <!-- Date (under title, no source) -->
@@ -760,7 +761,8 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 
 
     <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
-      ${this.escapeHtml(article.summary)}
+    <td style="font-size:16px; line-height:1.5; color:#333333;">
+    ${this.escapeHtml(article.summary)}
     </p>
     <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color};">
       <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px;"><strong>Action Tip:</strong></p>
