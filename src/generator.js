@@ -819,6 +819,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="x-apple-disable-message-reformatting">
   <meta name="color-scheme" content="light only">
   <title>${this.escapeHtml(title)}</title>
   <style>
@@ -832,11 +833,11 @@ const formattedDate = date.toLocaleDateString('en-AU', {
     }
   </style>
 </head>
-<body bgcolor="#FFFFFF" style="margin:0;padding:0;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<body bgcolor="#FFFFFF" style="margin:0;padding:0;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;font-size:16px;line-height:1.6;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
     <tr>
       <td align="center" style="padding: 0;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width:600px;background-color:#ffffff;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width:600px;background-color:#ffffff;">
           
           <!-- ===== EMAIL-SAFE HERO ===== -->
           <tr>
@@ -844,7 +845,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#1E40AF" style="background-color:#1E40AF;">
                 <tr>
                   <td align="center" style="padding:28px 16px;">
-                    <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
                       <!-- Logo -->
 <tr>
   <td align="center" style="padding: 0 0 16px 0;">
