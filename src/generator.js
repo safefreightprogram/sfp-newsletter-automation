@@ -777,11 +777,18 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   </td></tr>
 </table>
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-  <tr><td style="padding: 0 0 35px 0;">
-    <div style="height: 1px; background-color: #e5e7eb;"></div>
-  </td></tr>
+  <tr>
+    <td style="padding: 0 0 35px 0;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+        <tr>
+          <td style="border-top: 1px solid #e5e7eb; line-height: 1px; font-size: 0;">&nbsp;</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
 </table>`;
-  }).join('');
+}).join('');
+
 
   // One-click unsubscribe (GAS)
   const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec';
@@ -837,7 +844,11 @@ const formattedDate = date.toLocaleDateString('en-AU', {
                       <!-- Logo -->
 <tr>
   <td align="center" style="padding: 0 0 16px 0;">
-    <img src="${SFP_BRAND.logo.url}" width="${SFP_BRAND.logo.width}" height="${SFP_BRAND.logo.height}" alt="${SFP_BRAND.logo.alt}" style="display: block; border: 0; outline: 0; text-decoration: none; margin: 0 auto;" class="logo">
+    <img src="data:image/png;base64,${SFP_LOGO_BASE64.trim()}" 
+     width="${SFP_BRAND.logo.width}" 
+     height="${SFP_BRAND.logo.height}" 
+     alt="${SFP_BRAND.logo.alt}" 
+     style="display:block; border:0; outline:none; text-decoration:none; margin:0 auto;" class="logo">
   </td>
 </tr>
 <!-- Newsletter Title -->
