@@ -113,6 +113,33 @@ app.get('/newsletter-management.html', (req, res) => {
 const emailSender = new EmailSender();
 let newsletterCache = new Map();
 
+const express = require('express');
+const app = express(); // your existing line
+
+// NEW CORS CONFIG
+const cors = require('cors');
+
+const ALLOWED_ORIGINS = [
+  'https://www.safefreightprogram.com',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+];
+
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error('CORS: Origin not allowed'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// Handle preflight requests
+app.options('*', cors());
+
+
 // --- HEALTH CHECK ---
 app.get('/health', (req, res) => {
   res.status(200).json({
