@@ -740,16 +740,11 @@ const formattedDate = date.toLocaleDateString('en-AU', {
         ${article.category}
       </td></tr>
     </table>
-    <h2 style="margin: 12px 0 8px 0; color: ${SFP_BRAND.colors.dark}; font-size: ${SFP_BRAND.typography.sizes.h2}; font-weight: 700; line-height: 1.3; font-family: ${SFP_BRAND.typography.primary};">
+    <h2 style="margin: 12px 0 8px 0; color: ${SFP_BRAND.colors.dark}; font-size: ${SFP_BRAND.typography.sizes.h2}; font-weight: 700; line-height: 1.3; font-family: ${SFP_BRAND.typography.primary}; text-align:left;">
   ${this.escapeHtml(article.title)}
 </h2>
 
-<!-- Source & Date Metadata -->
-<div style="margin: 0 0 12px 0; color: ${SFP_BRAND.colors.gray600}; font-size: ${SFP_BRAND.typography.sizes.small}; font-family: ${SFP_BRAND.typography.primary};">
-  <span style="font-weight: 500;">${this.escapeHtml(article.source)}</span>
-  <span style="color: ${SFP_BRAND.colors.gray600}; margin: 0 8px;">•</span>
-  <span>Published recently</span>
-</div>
+
     <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
       ${this.escapeHtml(article.summary)}
     </p>
@@ -849,11 +844,6 @@ const formattedDate = date.toLocaleDateString('en-AU', {
     ${this.escapeHtml(formattedDate)}
   </td>
 </tr>
-<tr>
-  <td align="center" style="font:400 16px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#DBEAFE;padding-top:6px;">
-    ${this.escapeHtml(tagline)}
-  </td>
-</tr>
                     </table>
                   </td>
                 </tr>
@@ -864,7 +854,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 
           <!-- CONTENT WRAPPER -->
           <tr>
-            <td style="padding: 24px;" class="mobile-padding">
+            <td style="padding: 24px; text-align:left;" class="mobile-padding">
               ${articleCards}
 
               <!-- Share Button -->
