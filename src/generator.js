@@ -43,7 +43,7 @@ const SFP_BRAND = {
 
   newsletters: {
     pro: {
-      title: 'COR Intel Weekly',
+      title: 'CoR Intel Weekly',
       tagline: 'Chain of Responsibility Intelligence'
     },
     driver: {
@@ -536,7 +536,7 @@ const newsletterResult = {
 // ENHANCED: Process articles with URL validation and targeted action tips
   async processWithOpenAI(articles, segment) {
     const systemPrompt = segment === 'pro'
-      ? `You are Australia's leading Chain of Responsibility compliance consultant writing for COR Intel Weekly.
+      ? `You are Australia's leading Chain of Responsibility compliance consultant writing for CoR Intel Weekly.
 
 CRITICAL: You must NEVER modify, create, or fabricate URLs. Use the EXACT original URL provided - no changes allowed.
 
@@ -872,7 +872,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
                     <tr><td style="background-color: ${color}; border-radius: 6px;">
                       <a href="mailto:?subject=Recommended Newsletter: ${this.escapeHtml(title)}&body=Hi,%0A%0AI subscribe to ${this.escapeHtml(title)} and thought you might find it valuable too.%0A%0AYou can subscribe at:%0A%0Ahttps://www.safefreightprogram.com/subscribe.html%0A%0ACheers!"
                          style="display: inline-block; padding: 14px 28px; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 6px;">
-                        ${isPro ? 'Recommend COR Intel Weekly to a Colleague' : 'Share with a Mate'} →
+                        ${isPro ? 'Recommend CoR Intel Weekly to a Colleague' : 'Share with a Mate'} →
                       </a>
                     </td></tr>
                   </table>
@@ -996,7 +996,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 // Text-only newsletter for email clients that don't support HTML
   buildTextNewsletter(articles, segment) {
     const isPro = (segment === 'pro');
-    const title = isPro ? 'COR Intel Weekly' : 'Safe Freight Mate';
+    const title = isPro ? 'CoR Intel Weekly' : 'Safe Freight Mate';
     const date = new Date().toLocaleDateString('en-AU', {
       weekday: 'long',
       day: 'numeric', 
@@ -1061,10 +1061,10 @@ if (require.main === module) {
       });
       console.log('OpenAI connected:', testResponse.choices[0].message.content);
       
-      // Generate COR Intel Weekly
-      console.log('\nGenerating COR Intel Weekly...');
+      // Generate CoR Intel Weekly
+      console.log('\nGenerating CoR Intel Weekly...');
       const proNewsletter = await generator.generateNewsletter('pro');
-      console.log(`COR Intel Weekly Generated:`);
+      console.log(`CoR Intel Weekly Generated:`);
       console.log(`   Subject: ${proNewsletter.subject}`);
       console.log(`   Articles: ${proNewsletter.articles.length}`);
       console.log(`   Preview: ${proNewsletter.filename}`);
