@@ -12,6 +12,35 @@ const { AdvancedScheduler, setupAdvancedSchedulingEndpoints } = require('./advan
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const cors = require('cors');
+
+// List of allowed domains (your production site + dev machines)
+const ALLOWED_ORIGINS = [
+  'https://www.safefreightprogram.com',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+];
+
+app.use(cors({
+  origin(origin, cb) {
+    // allow requests with no origin (like curl, Postman) or from allowed list
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error('CORS: Origin not allowed'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
+}));
+
+// Handle preflight OPTIONS requests
+app.options('*', cors());
+
+const express = require('express');
+const app = express();
+
+
 // --- ENVIRONMENT VALIDATION ---
 function validateEnvironment() {
   const required = [
