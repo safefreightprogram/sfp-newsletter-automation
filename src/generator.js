@@ -851,7 +851,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 </tr>
 <tr>
   <td align="center" style="font:400 16px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#DBEAFE;padding-top:6px;">
-    ${this.escapeHtml(subtitle)}
+    ${this.escapeHtml(tagline)}
   </td>
 </tr>
                     </table>
