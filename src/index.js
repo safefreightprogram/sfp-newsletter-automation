@@ -1,6 +1,34 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+
+// only allow your site (plus localhost for dev)
+const ALLOWED_ORIGINS = [
+  'https://www.safefreightprogram.com',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+];
+
+// set Vary so caches don’t bite you
+app.use((req, res, next) => {
+  res.setHeader('Vary', 'Origin');
+  next();
+});
+
+// global CORS
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS: Origin not allowed'));
+  },
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+}));
+
+// preflight handler
+app.options('*', cors());
+
+const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const { google } = require('googleapis');
