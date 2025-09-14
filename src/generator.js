@@ -740,7 +740,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
         ${article.category}
       </td></tr>
     </table>
-    <h2 style="margin:12px 0 8px 0; color:#111827; font-size:19px; line-height:1.4; font-weight:700; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; text-align:left;">
+    <h2 style="margin:12px 0 8px 0; color:#111827; font-size:20px; line-height:1.4; font-weight:700; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; text-align:left;">
   ${this.escapeHtml(article.title)}
 </h2>
 
@@ -765,31 +765,30 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 </p>
 
     <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color};">
-      <p style="margin: 0 0 8px 0; color: #374151; font-size: 13px;"><strong>Action Tip:</strong></p>
-      <p style="margin: 0; color: #4b5563; font-size: 13px; line-height: 1.5;">${this.escapeHtml(article.tip)}</p>
+      <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px;"><strong>Action Tip:</strong></p>
+      <p style="margin: 0; color: #4b5563; font-size: 14px; line-height: 1.5;">${this.escapeHtml(article.tip)}</p>
     </div>
     <p style="margin: 8px 0 12px 0; color: #6b7280; font-size: 13px;">Source: ${this.escapeHtml(article.source)}</p>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0">
       <tr><td style="background-color: ${color}; border-radius: 4px;">
-        <a href="${articleUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 9px 16px; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: 600;">
+        <a href="${articleUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 18px; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600;">
           Read More →
         </a>
       </td></tr>
     </table>
   </td></tr>
 </table>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-  <tr><td height="12" style="line-height:12px;font-size:0;">&nbsp;</td></tr>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
   <tr>
-    <td style="padding: 0 0 22px 0;">
+    <td style="padding: 0 0 35px 0;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
         <tr>
-          <td style="border-top:1px solid #e5e7eb; line-height:1px; font-size:0;">&nbsp;</td>
+          <td style="border-top: 1px solid #e5e7eb; line-height: 1px; font-size: 0;">&nbsp;</td>
         </tr>
       </table>
     </td>
   </tr>
-</table>;
+</table>`;
 }).join('');
 
 
@@ -825,8 +824,8 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   <title>${this.escapeHtml(title)}</title>
   <style>
     @media only screen and (max-width: 600px) {
-      body, p { font-size:15px !important; line-height:1.55 !important; }
-      h2 { font-size:20px !important; line-height:1.4 !important; }
+      body, table, td, p { font-size:17px !important; line-height:1.6 !important; }
+      h2 { font-size:22px !important; line-height:1.35 !important; }
       .mobile-padding { padding: 20px !important; }
       .mobile-text { font-size: 16px !important; }
       .mobile-header { font-size: 24px !important; }
@@ -834,7 +833,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
     }
   </style>
 </head>
-<body bgcolor="#FFFFFF" style="margin:0;padding:0;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;font-size:15px;line-height:1.55;">
+<body bgcolor="#FFFFFF" style="margin:0;padding:0;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;font-size:16px;line-height:1.6;">
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
     <tr>
       <td align="center" style="padding: 0;">
