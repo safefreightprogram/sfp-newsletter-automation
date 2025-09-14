@@ -5,6 +5,53 @@ const config = require('../config/config');
 const fs = require('fs');
 const EmailSender = require('./emailSender');
 
+// SFP Brand Configuration
+const SFP_BRAND = {
+  colors: {
+    primary: '#1e40af',      // SFP Blue
+    secondary: '#374151',    // Professional Gray
+    accent: '#059669',       // Success Green
+    warning: '#d97706',      // Alert Orange
+    danger: '#dc2626',       // Critical Red
+    light: '#f8fafc',        // Light Background
+    dark: '#111827',         // Dark Text
+    blue100: '#dbeafe',      // Light Blue
+    blue500: '#3b82f6',      // Medium Blue
+    gray50: '#f9fafb',       // Very Light Gray
+    gray600: '#4b5563',      // Medium Gray
+    gray700: '#374151',      // Dark Gray
+    gray800: '#1f2937'       // Very Dark Gray
+  },
+  
+  logo: {
+    url: 'https://sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png',
+    width: 60,
+    height: 60,
+    alt: 'Safe Freight Program'
+  },
+  
+  typography: {
+    primary: "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
+    sizes: {
+      h1: '32px',
+      h2: '20px', 
+      body: '15px',
+      small: '13px',
+      caption: '11px'
+    }
+  },
+
+  newsletters: {
+    pro: {
+      title: 'COR Intel Weekly',
+      tagline: 'Chain of Responsibility Intelligence'
+    },
+    driver: {
+      title: 'Safe Freight Mate',
+      tagline: 'Your Weekly Safety & Compliance Update'
+    }
+  }
+};
 
 class NewsletterGenerator {
   constructor() {
@@ -658,14 +705,40 @@ PRIORITY ORDER (most important first):
 buildComplianceNewsletterHTML(articles, segment) {
   const isPro = (segment === 'pro');
   const color = '#1e40af'; // SFP blue
-  const title = isPro ? 'COR Intel Weekly' : 'Safe Freight Mate';
-  const subtitle = new Date().toLocaleDateString('en-AU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
+  const newsletterConfig = SFP_BRAND.newsletters[segment];
+const title = newsletterConfig.title;
+const tagline = newsletterConfig.tagline;
 
+// Enhanced date formatting
+const date = new Date();
+const formattedDate = date.toLocaleDateString('en-AU', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric'
+});
+
+// Enhanced relative date formatting
+formatRelativeDate(publishedDate) {
+  const now = new Date();
+  const diffTime = Math.abs(now - new Date(publishedDate));
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays <= 7) {
+    return `${diffDays} days ago`;
+  } else if (diffDays <= 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+  } else {
+    return new Date(publishedDate).toLocaleDateString('en-AU', {
+      day: 'numeric',
+      month: 'short'
+    });
+  }
+}
+  
   // Generate unique newsletter ID for tracking
   const newsletterId = `${segment}-${Date.now()}`;
 
@@ -687,9 +760,16 @@ buildComplianceNewsletterHTML(articles, segment) {
         ${article.category}
       </td></tr>
     </table>
-    <h2 style="margin: 12px 0 10px 0; color: #111827; font-size: 20px; font-weight: 700; line-height: 1.3;">
-      ${this.escapeHtml(article.title)}
-    </h2>
+    <h2 style="margin: 12px 0 8px 0; color: ${SFP_BRAND.colors.dark}; font-size: ${SFP_BRAND.typography.sizes.h2}; font-weight: 700; line-height: 1.3; font-family: ${SFP_BRAND.typography.primary};">
+  ${this.escapeHtml(article.title)}
+</h2>
+
+<!-- Source & Date Metadata -->
+<div style="margin: 0 0 12px 0; color: ${SFP_BRAND.colors.gray600}; font-size: ${SFP_BRAND.typography.sizes.small}; font-family: ${SFP_BRAND.typography.primary};">
+  <span style="font-weight: 500;">${this.escapeHtml(article.source)}</span>
+  <span style="color: ${SFP_BRAND.colors.gray600}; margin: 0 8px;">•</span>
+  <span>${this.formatRelativeDate(article.publishedDate || article.scrapedAt || new Date())}</span>
+</div>
     <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
       ${this.escapeHtml(article.summary)}
     </p>
@@ -765,14 +845,28 @@ buildComplianceNewsletterHTML(articles, segment) {
                 <tr>
                   <td align="center" style="padding:28px 16px;">
                     <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
-                      <tr>
-  <td align="center" style="padding:0 0 8px 0;">
-    <img src="https://sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png" width="60" alt="Safe Freight Program" style="display:block;border:0;outline:0;text-decoration:none;margin:0 auto;">
+                      <!-- Logo -->
+<tr>
+  <td align="center" style="padding: 0 0 16px 0;">
+    <img src="${SFP_BRAND.logo.url}" width="${SFP_BRAND.logo.width}" height="${SFP_BRAND.logo.height}" alt="${SFP_BRAND.logo.alt}" style="display: block; border: 0; outline: 0; text-decoration: none; margin: 0 auto;" class="logo">
   </td>
 </tr>
+<!-- Newsletter Title -->
 <tr>
-  <td align="center" style="font:700 32px/1.2 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#FFFFFF;">
-    ${this.escapeHtml(title)}
+  <td align="center" style="font: 700 ${SFP_BRAND.typography.sizes.h1}/1.2 ${SFP_BRAND.typography.primary}; color: #FFFFFF; padding: 0 0 8px 0;">
+    ${this.escapeHtml(SFP_BRAND.newsletters[segment].title)}
+  </td>
+</tr>
+<!-- Tagline -->
+<tr>
+  <td align="center" style="font: 400 14px/1.4 ${SFP_BRAND.typography.primary}; color: ${SFP_BRAND.colors.blue100}; padding: 0 0 8px 0;">
+    ${this.escapeHtml(SFP_BRAND.newsletters[segment].tagline)}
+  </td>
+</tr>
+<!-- Date -->
+<tr>
+  <td align="center" style="font: 400 16px/1.6 ${SFP_BRAND.typography.primary}; color: ${SFP_BRAND.colors.blue100};">
+    ${this.escapeHtml(formattedDate)}
   </td>
 </tr>
 <tr>
@@ -880,31 +974,47 @@ buildComplianceNewsletterHTML(articles, segment) {
 </html>`;
 }
 
-  // ENHANCED: Category styling with proper priority colors
   getCategoryStyle(category) {
-    const categoryStyles = {
-      'Safety Alert': { bgColor: '#fee2e2', textColor: '#dc2626' },        // Red - highest priority
-      'Enforcement Action': { bgColor: '#fef3c7', textColor: '#d97706' },   // Orange - second priority  
-      'Regulatory Update': { bgColor: '#dbeafe', textColor: '#1e40af' },    // Blue - third priority
-      'Technical Update': { bgColor: '#f3e8ff', textColor: '#7c3aed' },     // Purple - fourth priority
-      'Driver Wellness': { bgColor: '#dcfce7', textColor: '#16a34a' },      // Green - wellness
-      'Industry News': { bgColor: '#f1f5f9', textColor: '#475569' }         // Gray - lowest priority
-    };
-    
-    return categoryStyles[category] || categoryStyles['Industry News'];
-  }
+  const categoryStyles = {
+    'Safety Alert': { 
+      bgColor: '#fee2e2', 
+      textColor: '#dc2626' 
+    },        // Red - highest priority
+    'Enforcement Action': { 
+      bgColor: '#fef3c7', 
+      textColor: '#d97706' 
+    },   // Orange - second priority  
+    'Regulatory Update': { 
+      bgColor: SFP_BRAND.colors.blue100, 
+      textColor: SFP_BRAND.colors.primary 
+    },    // SFP Blue - third priority
+    'Technical Update': { 
+      bgColor: '#f3e8ff', 
+      textColor: '#7c3aed' 
+    },     // Purple - fourth priority
+    'Driver Wellness': { 
+      bgColor: '#dcfce7', 
+      textColor: '#16a34a' 
+    },      // Green - wellness
+    'Industry News': { 
+      bgColor: '#f1f5f9', 
+      textColor: '#475569' 
+    }         // Gray - lowest priority
+  };
+  
+  return categoryStyles[category] || categoryStyles['Industry News'];
+}
 
   getSubjectLine(segment) {
-    const date = new Date().toLocaleDateString('en-AU', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    });
-    
-    return segment === 'pro' 
-      ? `COR Intel Weekly - ${date}`
-      : `Safe Freight Mate - ${date}`;
-  }
+  const date = new Date().toLocaleDateString('en-AU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+  
+  const titles = SFP_BRAND.newsletters[segment];
+  return `${titles.title} - ${date}`;
+}
 // Text-only newsletter for email clients that don't support HTML
   buildTextNewsletter(articles, segment) {
     const isPro = (segment === 'pro');
