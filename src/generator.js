@@ -740,10 +740,10 @@ const formattedDate = date.toLocaleDateString('en-AU', {
         ${article.category}
       </td></tr>
     </table>
-    <h2 style="margin: 12px 0 8px 0; color: ${SFP_BRAND.colors.dark}; font-size: ${SFP_BRAND.typography.sizes.h2}; font-weight: 700; line-height: 1.3; font-family: ${SFP_BRAND.typography.primary}; text-align:left;">
-<td style="font-size:20px; line-height:1.4; font-weight:bold; color:#111827;">
+    <h2 style="margin:12px 0 8px 0; color:#111827; font-size:20px; line-height:1.4; font-weight:700; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; text-align:left;">
   ${this.escapeHtml(article.title)}
 </h2>
+
 <!-- Date (under title, no source) -->
 <div style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
   ${(() => {
@@ -760,10 +760,10 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 </div>
 
 
-    <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
-    <td style="font-size:16px; line-height:1.5; color:#333333;">
-    ${this.escapeHtml(article.summary)}
-    </p>
+    <p style="margin:0 0 16px 0; color:#333333; font-size:16px; line-height:1.5; text-align:left;">
+  ${this.escapeHtml(article.summary)}
+</p>
+
     <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color};">
       <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px;"><strong>Action Tip:</strong></p>
       <p style="margin: 0; color: #4b5563; font-size: 14px; line-height: 1.5;">${this.escapeHtml(article.tip)}</p>
@@ -823,6 +823,8 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   <title>${this.escapeHtml(title)}</title>
   <style>
     @media only screen and (max-width: 600px) {
+      body, table, td, p { font-size:17px !important; line-height:1.6 !important; }
+      h2 { font-size:22px !important; line-height:1.35 !important; }
       .mobile-padding { padding: 20px !important; }
       .mobile-text { font-size: 16px !important; }
       .mobile-header { font-size: 24px !important; }
@@ -875,7 +877,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 
           <!-- CONTENT WRAPPER -->
           <tr>
-            <td style="padding: 24px; text-align:left;" class="mobile-padding">
+            <td style="padding:24px; text-align:left; font-size:16px; line-height:1.6; color:#111827;" class="mobile-padding">
               ${articleCards}
 
               <!-- Share Button -->
