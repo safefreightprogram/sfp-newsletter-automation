@@ -718,26 +718,6 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   year: 'numeric'
 });
 
-// Enhanced relative date formatting
-formatRelativeDate(publishedDate) {
-  const now = new Date();
-  const diffTime = Math.abs(now - new Date(publishedDate));
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays <= 7) {
-    return `${diffDays} days ago`;
-  } else if (diffDays <= 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
-  } else {
-    return new Date(publishedDate).toLocaleDateString('en-AU', {
-      day: 'numeric',
-      month: 'short'
-    });
-  }
-}
   
   // Generate unique newsletter ID for tracking
   const newsletterId = `${segment}-${Date.now()}`;
@@ -768,7 +748,7 @@ formatRelativeDate(publishedDate) {
 <div style="margin: 0 0 12px 0; color: ${SFP_BRAND.colors.gray600}; font-size: ${SFP_BRAND.typography.sizes.small}; font-family: ${SFP_BRAND.typography.primary};">
   <span style="font-weight: 500;">${this.escapeHtml(article.source)}</span>
   <span style="color: ${SFP_BRAND.colors.gray600}; margin: 0 8px;">•</span>
-  <span>${this.formatRelativeDate(article.publishedDate || article.scrapedAt || new Date())}</span>
+  <span>Published recently</span>
 </div>
     <p style="margin: 0 0 16px 0; color: #4b5563; font-size: 15px; line-height: 1.6;">
       ${this.escapeHtml(article.summary)}
