@@ -736,7 +736,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 35px;">
   <tr><td>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-      <tr><td style="background-color: ${categoryStyle.bgColor}; color: ${categoryStyle.textColor}; padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+      <tr><td style="background-color: ${categoryStyle.bgColor}; color: ${categoryStyle.textColor}; padding: 6px 12px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;">
         ${article.category}
       </td></tr>
     </table>
@@ -768,7 +768,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
       <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px;"><strong>Action Tip:</strong></p>
       <p style="margin: 0; color: #4b5563; font-size: 14px; line-height: 1.5;">${this.escapeHtml(article.tip)}</p>
     </div>
-    <p style="margin: 8px 0 12px 0; color: #6b7280; font-size: 13px;">Source: ${this.escapeHtml(article.source)}</p>
+    <p style="margin: 8px 0 12px 0; color: #6b7280; font-size: 13px; font-style: italic;">Source: ${this.escapeHtml(article.source)}</p>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0">
       <tr><td style="background-color: ${color}; border-radius: 4px;">
         <a href="${articleUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 10px 18px; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600;">
@@ -823,6 +823,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   <meta name="color-scheme" content="light only">
   <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
   <title>${this.escapeHtml(title)}</title>
+  <meta name="description" content="Latest Chain of Responsibility intelligence and safety updates">
   <style>
     @media only screen and (max-width: 600px) {
       body, table, td, p { font-size:14px !important; line-height:1.6 !important; }
