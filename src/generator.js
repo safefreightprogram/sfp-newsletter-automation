@@ -824,7 +824,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   <title>${this.escapeHtml(title)}</title>
   <style>
     @media only screen and (max-width: 600px) {
-      body, table, td, p { font-size:17px !important; line-height:1.6 !important; }
+      body, table, td, p { font-size:15px !important; line-height:1.6 !important; }
       h2 { font-size:22px !important; line-height:1.35 !important; }
       .mobile-padding { padding: 20px !important; }
       .mobile-text { font-size: 16px !important; }
