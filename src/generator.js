@@ -736,7 +736,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-bottom: 35px;">
   <tr><td>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-      <tr><td style="background-color: ${categoryStyle.bgColor}; color: ${categoryStyle.textColor}; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+      <tr><td style="background-color: ${categoryStyle.bgColor}; color: ${categoryStyle.textColor}; padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
         ${article.category}
       </td></tr>
     </table>
@@ -764,7 +764,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   ${this.escapeHtml(article.summary)}
 </p>
 
-    <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color};">
+    <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color}; border-radius: 0 6px 6px 0;">
       <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px;"><strong>Action Tip:</strong></p>
       <p style="margin: 0; color: #4b5563; font-size: 14px; line-height: 1.5;">${this.escapeHtml(article.tip)}</p>
     </div>
@@ -821,15 +821,19 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="x-apple-disable-message-reformatting">
   <meta name="color-scheme" content="light only">
+  <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
   <title>${this.escapeHtml(title)}</title>
   <style>
     @media only screen and (max-width: 600px) {
-      body, table, td, p { font-size:15px !important; line-height:1.6 !important; }
+      body, table, td, p { font-size:14px !important; line-height:1.6 !important; }
       h2 { font-size:22px !important; line-height:1.35 !important; }
       .mobile-padding { padding: 20px !important; }
       .mobile-text { font-size: 16px !important; }
       .mobile-header { font-size: 24px !important; }
       .logo { width: 50px !important; height: 50px !important; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .dark-mode-safe { color: #ffffff !important; }
     }
   </style>
 </head>
