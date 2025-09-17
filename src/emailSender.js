@@ -168,7 +168,7 @@ async getSubscribersFromSheet(segment) {
       const sheets = google.sheets({ version: 'v4', auth });
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-        range: 'Subscribers!A:P',
+        range: 'Subscribers!A:R', // Extended to include all columns
       });
       
       const rows = response.data.values;
@@ -177,30 +177,77 @@ async getSubscribersFromSheet(segment) {
         return this.getFallbackSubscribers(segment);
       }
       
-      // Skip header row and filter for the segment
+      // Parse header row to get column positions
+      const headers = rows[0];
+      const columnMap = {};
+      headers.forEach((header, index) => {
+        columnMap[header.trim()] = index;
+      });
+      
+      // Get column indices based on your actual headers
+      const emailCol = columnMap['Email'];
+      const nameCol = columnMap['Name'];
+      const segmentCol = columnMap['Segment'];
+      const statusCol = columnMap['Status'];
+      const unsubCol = columnMap['Unsubscribed_At'];
+      const pausedCol = columnMap['Paused_At'];
+      const resumeCol = columnMap['Resume_At'];
+      const companyCol = columnMap['Company'];
+      const confirmedCol = columnMap['Confirmed_At'];
+      
+      if (emailCol === undefined || segmentCol === undefined || statusCol === undefined) {
+        console.error('❌ Required columns not found. Available columns:', headers);
+        return this.getFallbackSubscribers(segment);
+      }
+      
+      // Filter subscribers based on your new format
       const subscribers = [];
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (row.length < 4) continue;
         
-        const email = row[1]; // Column B
-        const name = row[2];  // Column C  
-        const subscriberSegment = row[3]; // Column D
-        const status = row[4]; // Column E
+        const email = row[emailCol];
+        const name = row[nameCol];
+        const subscriberSegment = row[segmentCol];
+        const status = row[statusCol];
+        const unsubscribedAt = row[unsubCol];
+        const pausedAt = row[pausedCol];
+        const resumeAt = row[resumeCol];
+        const company = row[companyCol];
+        const confirmedAt = row[confirmedCol];
         
-        if (email && 
-            email.includes('@') && 
-            subscriberSegment && 
-            subscriberSegment.toLowerCase() === segment.toLowerCase() &&
-            status && 
-            status.toLowerCase() === 'active') {
-          
+        // Validate email
+        if (!email || !email.includes('@')) continue;
+        
+        // Check if active status
+        if (!status || !['active', 'confirmed', 'subscribed'].includes(status.toLowerCase())) continue;
+        
+        // Check if unsubscribed
+        if (unsubscribedAt && String(unsubscribedAt).trim() !== '') continue;
+        
+        // Check if paused (and not ready to resume)
+        if (pausedAt && String(pausedAt).trim() !== '') {
+          if (!resumeAt || new Date(resumeAt) > new Date()) {
+            continue;
+          }
+        }
+        
+        // Check segment match
+        const segmentMatch = (
+          subscriberSegment && 
+          (subscriberSegment.toLowerCase() === segment.toLowerCase() ||
+           subscriberSegment.toLowerCase() === 'all' ||
+           (segment === 'pro' && subscriberSegment.toLowerCase() === 'professional'))
+        );
+        
+        if (segmentMatch) {
           subscribers.push({
             email: email.trim(),
             name: (name || '').trim(),
             segment: subscriberSegment.trim(),
             status: status.trim(),
-            subscribedDate: row[6] || new Date().toISOString() // Column G
+            company: (company || '').trim(),
+            subscribedDate: confirmedAt || new Date().toISOString()
           });
         }
       }
@@ -341,7 +388,7 @@ async getSubscribersFromSheet(segment) {
     return Buffer.from(`${email}-${Date.now()}`).toString('base64');
   }
 
-  async testEmailSystem() {
+ async testEmailSystem() {
     console.log('🧪 Testing Resend email system...');
     
     try {
@@ -374,6 +421,31 @@ async getSubscribersFromSheet(segment) {
         driverSubscribers: 0,
         totalSubscribers: 0
       };
+    }
+  }
+
+  async testSubscriberMapping() {
+    console.log('🧪 Testing subscriber mapping...');
+    
+    try {
+      const proSubs = await this.getSubscribersFromSheet('pro');
+      const driverSubs = await this.getSubscribersFromSheet('driver');
+      
+      console.log(`📊 Results:`);
+      console.log(`   Pro subscribers: ${proSubs.length}`);
+      console.log(`   Driver subscribers: ${driverSubs.length}`);
+      
+      if (proSubs.length > 0) {
+        console.log(`   Sample pro subscriber:`, proSubs[0]);
+      }
+      if (driverSubs.length > 0) {
+        console.log(`   Sample driver subscriber:`, driverSubs[0]);
+      }
+      
+      return { proSubs: proSubs.length, driverSubs: driverSubs.length };
+    } catch (error) {
+      console.error('❌ Subscriber mapping test failed:', error.message);
+      return { error: error.message };
     }
   }
 }
