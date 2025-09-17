@@ -490,39 +490,55 @@ function setupAdvancedSchedulingEndpoints(app, scheduler) {
     }
   });
 
-  // Get job status and dependencies
-  app.get('/api/schedule/status', (req, res) => {
-    try {
-      const config = scheduler.getConfiguration();
-      const status = {
-        scraping: {
-          enabled: config.schedules.scraping.enabled,
-          nextRun: config.nextRuns.scraping,
-          lastRun: config.schedules.scraping.lastRun,
-          schedule: scheduler.describeFriendlySchedule(config.schedules.scraping)
-        },
-        newsletter: {
-          enabled: config.schedules.newsletter.enabled,
-          nextRun: config.nextRuns.newsletter,
-          lastRun: config.schedules.newsletter.lastRun,
-          schedule: scheduler.describeFriendlySchedule(config.schedules.newsletter),
-          dependsOn: config.schedules.newsletter.dependsOn,
-          delayAfterDependency: config.schedules.newsletter.delayAfterDependency
-        },
-        dependencies: config.dependencies
-      };
-      
-      res.json({
-        success: true,
-        data: status
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
-    }
-  });
+// Get job status and dependencies
+app.get('/api/schedule/status', (req, res) => {
+  try {
+    const config = scheduler.getConfiguration();
+    const status = {
+      scraping: {
+        // Frontend needs these exact fields
+        enabled: config.schedules.scraping.enabled,
+        frequency: config.schedules.scraping.frequency,
+        dayOfWeek: config.schedules.scraping.dayOfWeek,
+        hour: config.schedules.scraping.hour,
+        minute: config.schedules.scraping.minute,
+        weekOfMonth: config.schedules.scraping.weekOfMonth,
+        // Display fields
+        nextRun: config.nextRuns.scraping,
+        lastRun: config.schedules.scraping.lastRun,
+        schedule: scheduler.describeFriendlySchedule(config.schedules.scraping),
+        status: config.schedules.scraping.enabled ? 'active' : 'disabled'
+      },
+      newsletter: {
+        // Frontend needs these exact fields
+        enabled: config.schedules.newsletter.enabled,
+        frequency: config.schedules.newsletter.frequency,
+        dayOfWeek: config.schedules.newsletter.dayOfWeek,
+        hour: config.schedules.newsletter.hour,
+        minute: config.schedules.newsletter.minute,
+        weekOfMonth: config.schedules.newsletter.weekOfMonth,
+        delayAfterDependency: config.schedules.newsletter.delayAfterDependency,
+        // Display fields
+        nextRun: config.nextRuns.newsletter,
+        lastRun: config.schedules.newsletter.lastRun,
+        schedule: scheduler.describeFriendlySchedule(config.schedules.newsletter),
+        dependsOn: config.schedules.newsletter.dependsOn,
+        status: config.schedules.newsletter.enabled ? 'active' : 'disabled'
+      },
+      dependencies: config.dependencies
+    };
+    
+    res.json({
+      success: true,
+      data: status
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 }
 
 module.exports = { AdvancedScheduler, setupAdvancedSchedulingEndpoints };
