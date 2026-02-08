@@ -855,13 +855,14 @@ const formattedDate = date.toLocaleDateString('en-AU', {
                       <!-- Logo -->
 <tr>
   <td align="center" style="padding: 0 0 16px 0;">
-    <img src="data:image/png;base64,${SFP_LOGO_BASE64.trim()}" 
-     width="${SFP_BRAND.logo.width}" 
-     height="${SFP_BRAND.logo.height}" 
-     alt="${SFP_BRAND.logo.alt}" 
+    <img src="${SFP_BRAND.logo.url}"
+     width="${SFP_BRAND.logo.width}"
+     height="${SFP_BRAND.logo.height}"
+     alt="${SFP_BRAND.logo.alt}"
      style="display:block; border:0; outline:none; text-decoration:none; margin:0 auto;">
   </td>
 </tr>
+
 <!-- Newsletter Title -->
 <tr>
   <td align="center" style="font: 700 ${SFP_BRAND.typography.sizes.h1}/1.2 ${SFP_BRAND.typography.primary}; color: #FFFFFF; padding: 0 0 8px 0;">
