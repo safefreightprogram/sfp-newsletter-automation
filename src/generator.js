@@ -1,6 +1,5 @@
 const OpenAI = require('openai');
 const SheetsManager = require('../config/sheets');
-const { SFP_LOGO_BASE64 } = require('../config/logo-base64');
 const config = require('../config/config');
 const fs = require('fs');
 const EmailSender = require('./emailSender');
