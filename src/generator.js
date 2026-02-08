@@ -708,6 +708,10 @@ buildComplianceNewsletterHTML(articles, segment) {
   const newsletterConfig = SFP_BRAND.newsletters[segment];
 const title = newsletterConfig.title;
 const tagline = newsletterConfig.tagline;
+// Preheader text (shows in inbox preview; hidden in the email body)
+const preheaderText = isPro
+  ? `${title} — ${tagline}. This week’s key safety, enforcement, and regulatory updates.`
+  : `${title} — ${tagline}. Quick weekly safety and compliance heads-up.`;
 
 // Enhanced date formatting
 const date = new Date();
@@ -839,6 +843,14 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   </style>
 </head>
 <body bgcolor="#FFFFFF" style="margin:0;padding:0;background-color:#FFFFFF;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;font-size:16px;line-height:1.6;">
+  <!-- Preheader (hidden) -->
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;color:#ffffff;">
+    ${this.escapeHtml(preheaderText)}
+  </div>
+  <!-- Prevent some clients from pulling random body text into preview -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
+  </div>
   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
     <tr>
       <td align="center" style="padding: 0;">
@@ -851,6 +863,12 @@ const formattedDate = date.toLocaleDateString('en-AU', {
                 <tr>
                   <td align="center" style="padding:28px 16px;">
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
+<!-- Text-first brand line (renders even if images are blocked) -->
+<tr>
+  <td align="center" style="padding: 0 0 10px 0; font: 600 13px/1.2 ${SFP_BRAND.typography.primary}; color: ${SFP_BRAND.colors.blue100}; letter-spacing: 0.3px;">
+    Safe Freight Program
+  </td>
+</tr>
                       <!-- Logo -->
 <tr>
   <td align="center" style="padding: 0 0 16px 0;">
