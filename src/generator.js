@@ -787,7 +787,7 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   <tr>
     <td style="border-top: 1px solid #e5e7eb; line-height: 1px; font-size: 0;">&nbsp;</td>
   </tr>
-</table>
+</table>`;
 }).join('');
 
   // One-click unsubscribe (GAS)
