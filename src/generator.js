@@ -24,11 +24,12 @@ const SFP_BRAND = {
   },
   
   logo: {
-    url: 'https://sfp-newsletter-automation-production.up.railway.app/sfp-logo-small.png',
-    width: 60,
-    height: 60,
-    alt: 'Safe Freight Program'
-  },
+  url: 'https://www.safefreightprogram.com/assets/email/sfp-logo-small.png',
+  width: 60,
+  height: 60,
+  alt: 'Safe Freight Program'
+},
+
   
   typography: {
     primary: "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
