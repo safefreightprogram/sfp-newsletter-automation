@@ -792,8 +792,9 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 
   // One-click unsubscribe (GAS)
   const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec';
-  const unsubscribeUrl = `${gasWebAppUrl}?e=unsub&i={{ISSUE_ID}}&s=${segment}&t={{TOKEN}}`;
-  const pauseUrl = `${gasWebAppUrl}?e=pause&i={{ISSUE_ID}}&s=${segment}&t={{TOKEN}}`;
+const unsubscribeUrl = gasWebAppUrl + '?e=unsub&i={{ISSUE_ID}}&s=' + segment + '&t={{TOKEN}}';
+const pauseUrl = gasWebAppUrl + '?e=pause&i={{ISSUE_ID}}&s=' + segment + '&t={{TOKEN}}';
+
 
   // Mailto fallbacks
   const unsubscribeMailto = 'mailto:unsubscribe@safefreightprogram.com.au?subject=Unsubscribe Request';
