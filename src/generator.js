@@ -705,6 +705,7 @@ PRIORITY ORDER (most important first):
 buildComplianceNewsletterHTML(articles, segment) {
   const isPro = (segment === 'pro');
   const color = '#1e40af'; // SFP blue
+  const FONT_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
   const newsletterConfig = SFP_BRAND.newsletters[segment];
 const title = newsletterConfig.title;
 const tagline = newsletterConfig.tagline;
@@ -782,19 +783,12 @@ const formattedDate = date.toLocaleDateString('en-AU', {
     </table>
   </td></tr>
 </table>
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 35px 0;">
   <tr>
-    <td style="padding: 0 0 35px 0;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-        <tr>
-          <td style="border-top: 1px solid #e5e7eb; line-height: 1px; font-size: 0;">&nbsp;</td>
-        </tr>
-      </table>
-    </td>
+    <td style="border-top: 1px solid #e5e7eb; line-height: 1px; font-size: 0;">&nbsp;</td>
   </tr>
-</table>`;
+</table>
 }).join('');
-
 
   // One-click unsubscribe (GAS)
   const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec';
