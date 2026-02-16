@@ -578,10 +578,22 @@ app.get('/api/confirm', async (req, res) => {
     const token = (req.query.token || '').toString().trim();
     if (!token) return res.status(400).send('Missing token');
 
+    // --- Google Sheets client (FIX: confirm route needs its own client) ---
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
+
     const resp = await sheets.spreadsheets.values.get({
       spreadsheetId: GOOGLE_SHEETS_ID,
       range: 'Subscribers!A:P'
     });
+
 
     const rows = resp.data.values || [];
     const headerOffset = 1; // assume row 1 is headers
@@ -621,10 +633,22 @@ app.get('/api/unsubscribe', async (req, res) => {
     const token = (req.query.token || '').toString().trim();
     if (!token) return res.status(400).send('Missing token');
 
+    // --- Google Sheets client (FIX: unsubscribe route needs its own client) ---
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
+
     const resp = await sheets.spreadsheets.values.get({
       spreadsheetId: GOOGLE_SHEETS_ID,
       range: 'Subscribers!A:P'
     });
+
 
     const rows = resp.data.values || [];
     const headerOffset = 1;
