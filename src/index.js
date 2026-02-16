@@ -459,50 +459,83 @@ app.post('/api/subscribers', async (req, res) => {
   try {
     const { email, name, segment, company, role } = req.body || {};
 
+    // --- Validate ---
     if (!email || !segment) {
       return res.status(400).json({ success: false, error: 'Email and segment are required' });
     }
+    if (!['pro', 'driver'].includes(segment)) {
+      return res.status(400).json({ success: false, error: 'Segment must be "pro" or "driver"' });
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email format' });
+    }
 
-    // Create pending subscriber + tokens
+    // --- Google Sheets client (scoped correctly) ---
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
+
+    // --- Prevent duplicates (by email, any segment) ---
+    const existingCheck = await sheets.spreadsheets.values.get({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A:P',
+    });
+    const existingRows = existingCheck.data.values || [];
+    for (let i = 1; i < existingRows.length; i++) {
+      if ((existingRows[i][1] || '').toLowerCase() === email.toLowerCase()) {
+        return res.status(409).json({ success: false, error: 'Subscriber already exists' });
+      }
+    }
+
+    // --- Create pending subscriber + tokens ---
     const subscriberId = `SUB-${Date.now()}`;
-    const subscribedAt = new Date().toISOString();
-    const updatedAt = subscribedAt;
+    const now = new Date().toISOString();
 
     const confirmToken = makeToken(16);
     const unsubToken = makeToken(16);
 
-    const newSubscriberData = [
-      subscriberId,            // A Subscriber_ID
-      email,                   // B Email
-      name || '',              // C Name
-      segment,                 // D Segment
-      'pending',               // E Status   <-- changed from active
-      req.ip || '',            // F Source_IP
-      subscribedAt,            // G Subscribed_At
-      confirmToken,            // H Confirm_Token
-      unsubToken,              // I Unsub_Token
-      company || '',           // J Company
-      role || '',              // K Role
-      '',                      // L Notes
-      updatedAt,               // M Updated_At
-      '',                      // N Confirmed_At
-      '',                      // O Unsubscribed_At
-      'weekly'                 // P Email_Frequency
+    const newSubscriberRow = [
+      subscriberId,         // A Subscriber_ID
+      email,                // B Email
+      name || '',           // C Name
+      segment,              // D Segment
+      'pending',            // E Status
+      req.ip || '',         // F Source_IP
+      now,                  // G Subscribed_At
+      confirmToken,         // H Confirm_Token
+      unsubToken,           // I Unsub_Token
+      company || '',        // J Company
+      role || '',           // K Role
+      '',                   // L Notes
+      now,                  // M Updated_At
+      '',                   // N Confirmed_At
+      '',                   // O Unsubscribed_At
+      'weekly'              // P Email_Frequency
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: GOOGLE_SHEETS_ID,
       range: 'Subscribers!A:P',
       valueInputOption: 'RAW',
-      requestBody: { values: [newSubscriberData] }
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [newSubscriberRow] }
     });
 
-    // Build confirm + unsubscribe links
-    const baseUrl = (process.env.PUBLIC_BASE_URL || '').trim() || 'https://sfp-newsletter-automation-production.up.railway.app';
+    // --- Email confirm + unsubscribe links ---
+    const baseUrl =
+      (process.env.PUBLIC_BASE_URL || '').trim() ||
+      'https://sfp-newsletter-automation-production.up.railway.app';
+
     const confirmUrl = `${baseUrl}/api/confirm?token=${encodeURIComponent(confirmToken)}`;
     const unsubUrl = `${baseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
 
-    // Send confirmation email (Resend)
     const safeName = (name || '').trim() || 'there';
     const subject =
       segment === 'driver'
@@ -534,12 +567,12 @@ app.post('/api/subscribers', async (req, res) => {
       message: 'Subscriber created (pending) — confirmation email sent',
       data: { subscriberId, email, name: name || '', segment, status: 'pending' }
     });
-
   } catch (error) {
     console.error('Error adding subscriber:', error);
-    return res.status(500).json({ success: false, error: 'Failed to add subscriber' });
+    return res.status(500).json({ success: false, error: error.message || 'Failed to add subscriber' });
   }
 });
+
 app.get('/api/confirm', async (req, res) => {
   try {
     const token = (req.query.token || '').toString().trim();
@@ -622,54 +655,6 @@ app.get('/api/unsubscribe', async (req, res) => {
   } catch (e) {
     console.error('Unsubscribe error:', e);
     return res.status(500).send('Unsubscribe failed');
-  }
-});
-
-    if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({ success: false, error: 'Segment must be "pro" or "driver"' });
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ success: false, error: 'Invalid email format' });
-    }
-    const auth = await google.auth.getClient({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    const sheets = google.sheets({ version: 'v4', auth });
-    const existingCheck = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: 'Subscribers!A:P',
-    });
-    const existingRows = existingCheck.data.values || [];
-    for (let i = 1; i < existingRows.length; i++) {
-      if (existingRows[i][1] && existingRows[i][1].toLowerCase() === email.toLowerCase()) {
-        return res.status(409).json({ success: false, error: 'Subscriber already exists' });
-      }
-    }
-    const subscriberId = `SUB-${Date.now()}`;
-    const timestamp = new Date().toISOString();
-    const newSubscriberData = [
-      subscriberId, email, name || '', segment, status, '',
-      timestamp, '', '', company || '', role || '', '', timestamp, '', '', 'weekly'
-    ];
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: 'Subscribers!A:P',
-      valueInputOption: 'RAW',
-      insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: [newSubscriberData] }
-    });
-    res.json({
-      success: true,
-      message: 'Subscriber added successfully',
-      data: { subscriberId, email, name: name || '', segment, status, subscribedAt: timestamp }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
