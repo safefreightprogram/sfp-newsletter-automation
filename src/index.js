@@ -8,6 +8,8 @@ const NewsletterGenerator = require('./generator');
 const { scrapeAllSources } = require('./scraper');
 const EmailSender = require('./emailSender');
 const { AdvancedScheduler, setupAdvancedSchedulingEndpoints } = require('./advancedScheduler');
+const crypto = require('crypto');
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -81,6 +83,39 @@ app.get('/newsletter-management.html', (req, res) => {
 });
 
 // --- GLOBALS ---
+function makeToken(len = 24) {
+  return crypto.randomBytes(len).toString('hex'); // 48 chars by default
+}
+
+async function sendResendEmail({ to, subject, html }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+
+  if (!apiKey) throw new Error('RESEND_API_KEY not set');
+  if (!from) throw new Error('EMAIL_FROM not set');
+
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to,
+      subject,
+      html,
+    }),
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text().catch(() => '');
+    throw new Error(`Resend send failed: ${resp.status} ${txt}`);
+  }
+
+  return resp.json().catch(() => ({}));
+}
+
 const emailSender = new EmailSender();
 let newsletterCache = new Map();
 
@@ -422,10 +457,174 @@ app.get('/api/subscribers/:segment?', async (req, res) => {
 
 app.post('/api/subscribers', async (req, res) => {
   try {
-    const { email, name, segment, company, role, status = 'active' } = req.body;
+    const { email, name, segment, company, role } = req.body || {};
+
     if (!email || !segment) {
       return res.status(400).json({ success: false, error: 'Email and segment are required' });
     }
+
+    // Create pending subscriber + tokens
+    const subscriberId = `SUB-${Date.now()}`;
+    const subscribedAt = new Date().toISOString();
+    const updatedAt = subscribedAt;
+
+    const confirmToken = makeToken(16);
+    const unsubToken = makeToken(16);
+
+    const newSubscriberData = [
+      subscriberId,            // A Subscriber_ID
+      email,                   // B Email
+      name || '',              // C Name
+      segment,                 // D Segment
+      'pending',               // E Status   <-- changed from active
+      req.ip || '',            // F Source_IP
+      subscribedAt,            // G Subscribed_At
+      confirmToken,            // H Confirm_Token
+      unsubToken,              // I Unsub_Token
+      company || '',           // J Company
+      role || '',              // K Role
+      '',                      // L Notes
+      updatedAt,               // M Updated_At
+      '',                      // N Confirmed_At
+      '',                      // O Unsubscribed_At
+      'weekly'                 // P Email_Frequency
+    ];
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A:P',
+      valueInputOption: 'RAW',
+      requestBody: { values: [newSubscriberData] }
+    });
+
+    // Build confirm + unsubscribe links
+    const baseUrl = (process.env.PUBLIC_BASE_URL || '').trim() || 'https://sfp-newsletter-automation-production.up.railway.app';
+    const confirmUrl = `${baseUrl}/api/confirm?token=${encodeURIComponent(confirmToken)}`;
+    const unsubUrl = `${baseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
+
+    // Send confirmation email (Resend)
+    const safeName = (name || '').trim() || 'there';
+    const subject =
+      segment === 'driver'
+        ? 'Confirm your Safe Freight Mate subscription'
+        : 'Confirm your CoR Intel Weekly subscription';
+
+    const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#111;">
+        <h2 style="margin:0 0 12px;">Almost there, ${safeName}.</h2>
+        <p style="margin:0 0 12px;">
+          Please confirm your subscription by clicking the button below.
+        </p>
+        <p style="margin:18px 0;">
+          <a href="${confirmUrl}" style="display:inline-block;padding:12px 16px;border-radius:8px;background:#1d4ed8;color:#fff;text-decoration:none;">
+            Confirm subscription
+          </a>
+        </p>
+        <p style="margin:18px 0 0;font-size:12px;color:#444;">
+          If you didn’t request this, ignore this email.<br/>
+          Unsubscribe link: <a href="${unsubUrl}">${unsubUrl}</a>
+        </p>
+      </div>
+    `;
+
+    await sendResendEmail({ to: email, subject, html });
+
+    return res.json({
+      success: true,
+      message: 'Subscriber created (pending) — confirmation email sent',
+      data: { subscriberId, email, name: name || '', segment, status: 'pending' }
+    });
+
+  } catch (error) {
+    console.error('Error adding subscriber:', error);
+    return res.status(500).json({ success: false, error: 'Failed to add subscriber' });
+  }
+});
+app.get('/api/confirm', async (req, res) => {
+  try {
+    const token = (req.query.token || '').toString().trim();
+    if (!token) return res.status(400).send('Missing token');
+
+    const resp = await sheets.spreadsheets.values.get({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A:P'
+    });
+
+    const rows = resp.data.values || [];
+    const headerOffset = 1; // assume row 1 is headers
+
+    // Column H = Confirm_Token (index 7)
+    const rowIndex = rows.findIndex((r, i) => i >= headerOffset && (r[7] || '') === token);
+    if (rowIndex === -1) return res.status(404).send('Token not found');
+
+    const row = rows[rowIndex];
+
+    // Update: Status(E)=active, Confirmed_At(N)=now, Updated_At(M)=now
+    row[4] = 'active';
+    row[13] = new Date().toISOString();
+    row[12] = row[13];
+
+    // Optionally clear confirm token so it can’t be reused
+    row[7] = '';
+
+    const sheetRowNumber = rowIndex + 1; // because rows[] is 1-based sheet rows in this range
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: `Subscribers!A${sheetRowNumber}:P${sheetRowNumber}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [row] }
+    });
+
+    // Redirect to your website “confirmed” page (you can change this later)
+    return res.redirect('https://www.safefreightprogram.com/subscribe-thanks.html?confirmed=1');
+  } catch (e) {
+    console.error('Confirm error:', e);
+    return res.status(500).send('Confirm failed');
+  }
+});
+
+app.get('/api/unsubscribe', async (req, res) => {
+  try {
+    const token = (req.query.token || '').toString().trim();
+    if (!token) return res.status(400).send('Missing token');
+
+    const resp = await sheets.spreadsheets.values.get({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A:P'
+    });
+
+    const rows = resp.data.values || [];
+    const headerOffset = 1;
+
+    // Column I = Unsub_Token (index 8)
+    const rowIndex = rows.findIndex((r, i) => i >= headerOffset && (r[8] || '') === token);
+    if (rowIndex === -1) return res.status(404).send('Token not found');
+
+    const row = rows[rowIndex];
+
+    // Update: Status(E)=unsubscribed, Unsubscribed_At(O)=now, Updated_At(M)=now
+    row[4] = 'unsubscribed';
+    row[14] = new Date().toISOString();
+    row[12] = row[14];
+
+    // Clear token
+    row[8] = '';
+
+    const sheetRowNumber = rowIndex + 1;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: `Subscribers!A${sheetRowNumber}:P${sheetRowNumber}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [row] }
+    });
+
+    return res.redirect('https://www.safefreightprogram.com/subscribe-thanks.html?unsubscribed=1');
+  } catch (e) {
+    console.error('Unsubscribe error:', e);
+    return res.status(500).send('Unsubscribe failed');
+  }
+});
+
     if (!['pro', 'driver'].includes(segment)) {
       return res.status(400).json({ success: false, error: 'Segment must be "pro" or "driver"' });
     }
