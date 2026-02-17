@@ -621,7 +621,16 @@ app.get('/api/confirm', async (req, res) => {
     });
 
     // Redirect to your website “confirmed” page (you can change this later)
-    return res.redirect('https://www.safefreightprogram.com/subscribe-thanks.html?confirmed=1');
+    // Redirect to the website confirmed page with context (email + segment)
+    const confirmedEmail = (row[1] || '').toString().trim();   // Column B = Email
+    const confirmedSeg = (row[3] || '').toString().trim();     // Column D = Segment
+
+    const redirectUrl =
+      `https://www.safefreightprogram.com/subscribe-confirmed.html` +
+      `?email=${encodeURIComponent(confirmedEmail)}` +
+      `&segments=${encodeURIComponent(confirmedSeg)}`;
+
+    return res.redirect(302, redirectUrl);
   } catch (e) {
     console.error('Confirm error:', e);
     return res.status(500).send('Confirm failed');
