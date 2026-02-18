@@ -600,7 +600,7 @@ app.get('/api/confirm', async (req, res) => {
     const token = (req.query.token || '').toString().trim();
     if (!token) return res.status(400).send('Missing token');
 
-    // --- Google Sheets client (FIX: confirm route needs its own client) ---
+    // Sheets client
     const auth = await google.auth.getClient({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -609,15 +609,15 @@ app.get('/api/confirm', async (req, res) => {
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
     const sheets = google.sheets({ version: 'v4', auth });
-    const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 
+    // Read all subscriber rows (enough columns to cover your headers)
     const resp = await sheets.spreadsheets.values.get({
-      spreadsheetId: GOOGLE_SHEETS_ID,
-      range: 'Subscribers!A:P'
+      spreadsheetId,
+      range: 'Subscribers!A:Z'
     });
 
-
-      const rows = resp.data.values || [];
+    const rows = resp.data.values || [];
     if (rows.length < 2) return res.status(404).send('Token not found');
 
     const headers = (rows[0] || []).map(h => (h || '').toString().trim());
@@ -630,21 +630,32 @@ app.get('/api/confirm', async (req, res) => {
     const idxEmail = colIndex('Email');
     const idxSegment = colIndex('Segment');
 
-    if (idxConfirm === -1 || idxStatus === -1 || idxUpdated === -1 || idxConfirmedAt === -1) {
+    if ([idxConfirm, idxStatus, idxUpdated, idxConfirmedAt].some(i => i === -1)) {
       return res.status(500).send('Subscribers sheet headers missing required columns');
     }
 
-    // Find row where Confirm_Token matches
+    // Find matching row
     const rowIndex = rows.findIndex((r, i) => i >= 1 && (r[idxConfirm] || '') === token);
     if (rowIndex === -1) return res.status(404).send('Token not found');
 
     const row = rows[rowIndex];
     const now = new Date().toISOString();
 
-    // Only allow pending -> active via confirm
     const currentStatus = (row[idxStatus] || '').toString().toLowerCase();
+
+    // Idempotent behaviour:
+    // - if already active, just redirect successfully (do NOT error)
+    if (currentStatus === 'active') {
+      const email0 = idxEmail !== -1 ? (row[idxEmail] || '') : '';
+      const segment0 = idxSegment !== -1 ? (row[idxSegment] || '') : '';
+      const redirectAlready =
+        `https://www.safefreightprogram.com/subscribe-confirmed?` +
+        `email=${encodeURIComponent(email0)}&segments=${encodeURIComponent(segment0)}&already=1`;
+      return res.redirect(redirectAlready);
+    }
+
+    // Only pending -> active
     if (currentStatus !== 'pending') {
-      // If already active/unsubscribed, do NOT silently change anything
       return res.redirect('https://www.safefreightprogram.com/subscribe-confirmed?already=1');
     }
 
@@ -652,8 +663,7 @@ app.get('/api/confirm', async (req, res) => {
     row[idxConfirmedAt] = now;
     row[idxUpdated] = now;
 
-    // Clear confirm token so it can’t be reused
-    row[idxConfirm] = '';
+    // IMPORTANT: do NOT clear Confirm_Token (prevents SafeLinks/scan double-hit issues)
 
     const email = idxEmail !== -1 ? (row[idxEmail] || '') : '';
     const segment = idxSegment !== -1 ? (row[idxSegment] || '') : '';
@@ -662,43 +672,30 @@ app.get('/api/confirm', async (req, res) => {
     const lastColLetter = String.fromCharCode(65 + headers.length - 1);
 
     await sheets.spreadsheets.values.update({
-      spreadsheetId: GOOGLE_SHEETS_ID,
+      spreadsheetId,
       range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
       valueInputOption: 'RAW',
       requestBody: { values: [row] }
     });
 
-    // Redirect to confirmed page with context
     const redirectUrl =
       `https://www.safefreightprogram.com/subscribe-confirmed?` +
       `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segment)}`;
 
     return res.redirect(redirectUrl);
-
-
-    // Redirect to your website “confirmed” page (you can change this later)
-    // Redirect to the website confirmed page with context (email + segment)
-    const confirmedEmail = (row[1] || '').toString().trim();   // Column B = Email
-    const confirmedSeg = (row[3] || '').toString().trim();     // Column D = Segment
-
-    const redirectUrl =
-      `https://www.safefreightprogram.com/subscribe-confirmed.html` +
-      `?email=${encodeURIComponent(confirmedEmail)}` +
-      `&segments=${encodeURIComponent(confirmedSeg)}`;
-
-    return res.redirect(302, redirectUrl);
   } catch (e) {
     console.error('Confirm error:', e);
     return res.status(500).send('Confirm failed');
   }
 });
 
+
 app.get('/api/unsubscribe', async (req, res) => {
   try {
     const token = (req.query.token || '').toString().trim();
     if (!token) return res.status(400).send('Missing token');
 
-    // --- Google Sheets client (FIX: unsubscribe route needs its own client) ---
+    // Sheets client
     const auth = await google.auth.getClient({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -707,18 +704,14 @@ app.get('/api/unsubscribe', async (req, res) => {
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
     const sheets = google.sheets({ version: 'v4', auth });
-    const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 
     const resp = await sheets.spreadsheets.values.get({
-      spreadsheetId: GOOGLE_SHEETS_ID,
-      range: 'Subscribers!A:P'
+      spreadsheetId,
+      range: 'Subscribers!A:Z'
     });
 
-
     const rows = resp.data.values || [];
-    const headerOffset = 1;
-
-       const rows = resp.data.values || [];
     if (rows.length < 2) return res.status(404).send('Token not found');
 
     const headers = (rows[0] || []).map(h => (h || '').toString().trim());
@@ -731,7 +724,7 @@ app.get('/api/unsubscribe', async (req, res) => {
     const idxEmail = colIndex('Email');
     const idxSegment = colIndex('Segment');
 
-    if (idxUnsub === -1 || idxStatus === -1 || idxUpdated === -1 || idxUnsubAt === -1) {
+    if ([idxUnsub, idxStatus, idxUpdated, idxUnsubAt].some(i => i === -1)) {
       return res.status(500).send('Subscribers sheet headers missing required columns');
     }
 
@@ -741,12 +734,23 @@ app.get('/api/unsubscribe', async (req, res) => {
     const row = rows[rowIndex];
     const now = new Date().toISOString();
 
+    const currentStatus = (row[idxStatus] || '').toString().toLowerCase();
+
+    // Idempotent: if already unsubscribed, redirect successfully
+    if (currentStatus === 'unsubscribed') {
+      const email0 = idxEmail !== -1 ? (row[idxEmail] || '') : '';
+      const segment0 = idxSegment !== -1 ? (row[idxSegment] || '') : '';
+      const redirectAlready =
+        `https://www.safefreightprogram.com/unsubscribe-confirmed?` +
+        `email=${encodeURIComponent(email0)}&segments=${encodeURIComponent(segment0)}&already=1`;
+      return res.redirect(redirectAlready);
+    }
+
     row[idxStatus] = 'unsubscribed';
     row[idxUnsubAt] = now;
     row[idxUpdated] = now;
 
-    // Clear token
-    row[idxUnsub] = '';
+    // IMPORTANT: do NOT clear Unsub_Token (same SafeLinks double-hit issue)
 
     const email = idxEmail !== -1 ? (row[idxEmail] || '') : '';
     const segment = idxSegment !== -1 ? (row[idxSegment] || '') : '';
@@ -755,7 +759,7 @@ app.get('/api/unsubscribe', async (req, res) => {
     const lastColLetter = String.fromCharCode(65 + headers.length - 1);
 
     await sheets.spreadsheets.values.update({
-      spreadsheetId: GOOGLE_SHEETS_ID,
+      spreadsheetId,
       range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
       valueInputOption: 'RAW',
       requestBody: { values: [row] }
@@ -766,27 +770,12 @@ app.get('/api/unsubscribe', async (req, res) => {
       `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segment)}`;
 
     return res.redirect(redirectUrl);
-
-      valueInputOption: 'RAW',
-      requestBody: { values: [row] }
-    });
-
-        // Redirect to the website unsubscribe confirmed page with context (email + segment)
-    const unsubEmail = (row[1] || '').toString().trim();   // Column B = Email
-    const unsubSeg = (row[3] || '').toString().trim();     // Column D = Segment
-
-    const redirectUrl =
-      `https://www.safefreightprogram.com/unsubscribe-confirmed.html` +
-      `?email=${encodeURIComponent(unsubEmail)}` +
-      `&segments=${encodeURIComponent(unsubSeg)}`;
-
-    return res.redirect(302, redirectUrl);
-
   } catch (e) {
     console.error('Unsubscribe error:', e);
     return res.status(500).send('Unsubscribe failed');
   }
 });
+
 
 app.put('/api/subscribers/:email', async (req, res) => {
   try {
