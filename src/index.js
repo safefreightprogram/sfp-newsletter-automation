@@ -485,7 +485,7 @@ app.post('/api/subscribers', async (req, res) => {
     // --- Prevent duplicates (by email, any segment) ---
     const existingCheck = await sheets.spreadsheets.values.get({
       spreadsheetId: GOOGLE_SHEETS_ID,
-      range: 'Subscribers!A:P',
+range: 'Subscribers!A:Z',
     });
     const existingRows = existingCheck.data.values || [];
     for (let i = 1; i < existingRows.length; i++) {
