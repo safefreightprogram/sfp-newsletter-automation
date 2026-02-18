@@ -494,6 +494,23 @@ range: 'Subscribers!A:Z',
       }
     }
 
+      // --- Read headers so we can write into the correct columns even if the sheet changes ---
+    const headerResp = await sheets.spreadsheets.values.get({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A1:Z1'
+    });
+    const headers = (headerResp.data.values?.[0] || []).map(h => (h || '').toString().trim());
+
+    const colIndex = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+    // Helper: create an output row sized to header length
+    const outRow = new Array(headers.length).fill('');
+
+    const set = (headerName, value) => {
+      const i = colIndex(headerName);
+      if (i !== -1) outRow[i] = value ?? '';
+    };
+
     // --- Create pending subscriber + tokens ---
     const subscriberId = `SUB-${Date.now()}`;
     const now = new Date().toISOString();
@@ -501,32 +518,34 @@ range: 'Subscribers!A:Z',
     const confirmToken = makeToken(16);
     const unsubToken = makeToken(16);
 
-    const newSubscriberRow = [
-      subscriberId,         // A Subscriber_ID
-      email,                // B Email
-      name || '',           // C Name
-      segment,              // D Segment
-      'pending',            // E Status
-      req.ip || '',         // F Source_IP
-      now,                  // G Subscribed_At
-      confirmToken,         // H Confirm_Token
-      unsubToken,           // I Unsub_Token
-      company || '',        // J Company
-      role || '',           // K Role
-      '',                   // L Notes
-      now,                  // M Updated_At
-      '',                   // N Confirmed_At
-      '',                   // O Unsubscribed_At
-      'weekly'              // P Email_Frequency
-    ];
+    set('Subscriber_ID', subscriberId);
+    set('Email', email);
+    set('Name', name || '');
+    set('Segment', segment);
+    set('Status', 'pending');
+    set('Source_IP', req.ip || '');
+    set('Subscribed_At', now);
+    set('Confirm_Token', confirmToken);
+    set('Unsub_Token', unsubToken);
+    set('Company', company || '');
+    set('Role', role || '');
+    set('Notes', '');
+    set('Updated_At', now);
+    set('Confirmed_At', '');
+    set('Unsubscribed_At', '');
+    set('Email_Frequency', 'weekly');
+    set('Paused_At', '');
+    set('Resume_At', '');
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: GOOGLE_SHEETS_ID,
-      range: 'Subscribers!A:P',
-      valueInputOption: 'RAW',
-      insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: [newSubscriberRow] }
-    });
+
+   await sheets.spreadsheets.values.append({
+  spreadsheetId: GOOGLE_SHEETS_ID,
+  range: 'Subscribers!A:Z',
+  valueInputOption: 'RAW',
+  insertDataOption: 'INSERT_ROWS',
+  requestBody: { values: [outRow] }
+});
+
 
     // --- Email confirm + unsubscribe links ---
        // IMPORTANT: confirmation/unsubscribe links must hit the API host (Railway), not Cloudflare Pages
