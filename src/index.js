@@ -529,12 +529,15 @@ app.post('/api/subscribers', async (req, res) => {
     });
 
     // --- Email confirm + unsubscribe links ---
-    const baseUrl =
+       // IMPORTANT: confirmation/unsubscribe links must hit the API host (Railway), not Cloudflare Pages
+    const apiBaseUrl =
+      (process.env.PUBLIC_API_BASE_URL || '').trim() ||
       (process.env.PUBLIC_BASE_URL || '').trim() ||
       'https://sfp-newsletter-automation-production.up.railway.app';
 
-    const confirmUrl = `${baseUrl}/api/confirm?token=${encodeURIComponent(confirmToken)}`;
-    const unsubUrl = `${baseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
+    const confirmUrl = `${apiBaseUrl}/api/confirm?token=${encodeURIComponent(confirmToken)}`;
+    const unsubUrl = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
+
 
     const safeName = (name || '').trim() || 'there';
     const subject =
