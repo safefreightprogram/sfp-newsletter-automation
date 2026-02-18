@@ -89,10 +89,17 @@ class EmailSender {
     }
     
     const issueId = `${newsletterData.segment}-${new Date().toISOString().split('T')[0]}`;
-    const unsubscribeToken = this.generateUnsubscribeToken(subscriber.email);
+const unsubscribeToken = subscriber.unsubToken || subscriber.unsub_token || subscriber.Unsub_Token;
     
-    const unsubscribeUrl = `https://safefreightprogram.com/unsubscribe?token=${unsubscribeToken}&email=${encodeURIComponent(subscriber.email)}`;
-    const pauseUrl = `https://safefreightprogram.com/pause?token=${unsubscribeToken}&email=${encodeURIComponent(subscriber.email)}`;
+    const apiBaseUrl =
+  (process.env.PUBLIC_API_BASE_URL || '').trim() ||
+  'https://sfp-newsletter-automation-production.up.railway.app';
+
+const unsubscribeUrl = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+
+// (pause can come later — for now, don’t pretend it exists)
+const pauseUrl = '';
+
     
     // Personalize HTML
     let personalizedHtml = newsletterData.html
