@@ -687,7 +687,17 @@ app.get('/api/unsubscribe', async (req, res) => {
       requestBody: { values: [row] }
     });
 
-    return res.redirect('https://www.safefreightprogram.com/subscribe-thanks.html?unsubscribed=1');
+    return res.redirect('https://www.safefreigh    // Redirect to the website unsubscribe confirmed page with context (email + segment)
+    const unsubEmail = (row[1] || '').toString().trim();   // Column B = Email
+    const unsubSeg = (row[3] || '').toString().trim();     // Column D = Segment
+
+    const redirectUrl =
+      `https://www.safefreightprogram.com/unsubscribe-confirmed.html` +
+      `?email=${encodeURIComponent(unsubEmail)}` +
+      `&segments=${encodeURIComponent(unsubSeg)}`;
+
+    return res.redirect(302, redirectUrl);
+tprogram.com/subscribe-thanks.html?unsubscribed=1');
   } catch (e) {
     console.error('Unsubscribe error:', e);
     return res.status(500).send('Unsubscribe failed');
