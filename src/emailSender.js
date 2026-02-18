@@ -189,11 +189,16 @@ async getSubscribersFromSheet(segment) {
       const nameCol = columnMap['Name'];
       const segmentCol = columnMap['Segment'];
       const statusCol = columnMap['Status'];
-      const unsubCol = columnMap['Unsubscribed_At'];
+            const unsubCol = columnMap['Unsubscribed_At'];
       const pausedCol = columnMap['Paused_At'];
       const resumeCol = columnMap['Resume_At'];
       const companyCol = columnMap['Company'];
       const confirmedCol = columnMap['Confirmed_At'];
+
+      // Optional columns may not exist in the sheet; guard indexes
+      const safeCell = (row, colIndex) =>
+        (typeof colIndex === 'number' && colIndex >= 0) ? row[colIndex] : '';
+
       
       if (emailCol === undefined || segmentCol === undefined || statusCol === undefined) {
         console.error('❌ Required columns not found. Available columns:', headers);
@@ -210,11 +215,12 @@ async getSubscribersFromSheet(segment) {
         const name = row[nameCol];
         const subscriberSegment = row[segmentCol];
         const status = row[statusCol];
-        const unsubscribedAt = row[unsubCol];
-        const pausedAt = row[pausedCol];
-        const resumeAt = row[resumeCol];
-        const company = row[companyCol];
-        const confirmedAt = row[confirmedCol];
+                const unsubscribedAt = safeCell(row, unsubCol);
+        const pausedAt = safeCell(row, pausedCol);
+        const resumeAt = safeCell(row, resumeCol);
+        const company = safeCell(row, companyCol);
+        const confirmedAt = safeCell(row, confirmedCol);
+
         
         // Validate email
         if (!email || !email.includes('@')) continue;
