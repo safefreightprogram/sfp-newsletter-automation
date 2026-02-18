@@ -617,30 +617,64 @@ app.get('/api/confirm', async (req, res) => {
     });
 
 
-    const rows = resp.data.values || [];
-    const headerOffset = 1; // assume row 1 is headers
+      const rows = resp.data.values || [];
+    if (rows.length < 2) return res.status(404).send('Token not found');
 
-    // Column H = Confirm_Token (index 7)
-    const rowIndex = rows.findIndex((r, i) => i >= headerOffset && (r[7] || '') === token);
+    const headers = (rows[0] || []).map(h => (h || '').toString().trim());
+    const colIndex = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+    const idxConfirm = colIndex('Confirm_Token');
+    const idxStatus = colIndex('Status');
+    const idxUpdated = colIndex('Updated_At');
+    const idxConfirmedAt = colIndex('Confirmed_At');
+    const idxEmail = colIndex('Email');
+    const idxSegment = colIndex('Segment');
+
+    if (idxConfirm === -1 || idxStatus === -1 || idxUpdated === -1 || idxConfirmedAt === -1) {
+      return res.status(500).send('Subscribers sheet headers missing required columns');
+    }
+
+    // Find row where Confirm_Token matches
+    const rowIndex = rows.findIndex((r, i) => i >= 1 && (r[idxConfirm] || '') === token);
     if (rowIndex === -1) return res.status(404).send('Token not found');
 
     const row = rows[rowIndex];
+    const now = new Date().toISOString();
 
-    // Update: Status(E)=active, Confirmed_At(N)=now, Updated_At(M)=now
-    row[4] = 'active';
-    row[13] = new Date().toISOString();
-    row[12] = row[13];
+    // Only allow pending -> active via confirm
+    const currentStatus = (row[idxStatus] || '').toString().toLowerCase();
+    if (currentStatus !== 'pending') {
+      // If already active/unsubscribed, do NOT silently change anything
+      return res.redirect('https://www.safefreightprogram.com/subscribe-confirmed?already=1');
+    }
 
-    // Optionally clear confirm token so it can’t be reused
-    row[7] = '';
+    row[idxStatus] = 'active';
+    row[idxConfirmedAt] = now;
+    row[idxUpdated] = now;
 
-    const sheetRowNumber = rowIndex + 1; // because rows[] is 1-based sheet rows in this range
+    // Clear confirm token so it can’t be reused
+    row[idxConfirm] = '';
+
+    const email = idxEmail !== -1 ? (row[idxEmail] || '') : '';
+    const segment = idxSegment !== -1 ? (row[idxSegment] || '') : '';
+
+    const sheetRowNumber = rowIndex + 1; // 1-based
+    const lastColLetter = String.fromCharCode(65 + headers.length - 1);
+
     await sheets.spreadsheets.values.update({
       spreadsheetId: GOOGLE_SHEETS_ID,
-      range: `Subscribers!A${sheetRowNumber}:P${sheetRowNumber}`,
+      range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
       valueInputOption: 'RAW',
       requestBody: { values: [row] }
     });
+
+    // Redirect to confirmed page with context
+    const redirectUrl =
+      `https://www.safefreightprogram.com/subscribe-confirmed?` +
+      `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segment)}`;
+
+    return res.redirect(redirectUrl);
+
 
     // Redirect to your website “confirmed” page (you can change this later)
     // Redirect to the website confirmed page with context (email + segment)
@@ -684,24 +718,55 @@ app.get('/api/unsubscribe', async (req, res) => {
     const rows = resp.data.values || [];
     const headerOffset = 1;
 
-    // Column I = Unsub_Token (index 8)
-    const rowIndex = rows.findIndex((r, i) => i >= headerOffset && (r[8] || '') === token);
+       const rows = resp.data.values || [];
+    if (rows.length < 2) return res.status(404).send('Token not found');
+
+    const headers = (rows[0] || []).map(h => (h || '').toString().trim());
+    const colIndex = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+    const idxUnsub = colIndex('Unsub_Token');
+    const idxStatus = colIndex('Status');
+    const idxUpdated = colIndex('Updated_At');
+    const idxUnsubAt = colIndex('Unsubscribed_At');
+    const idxEmail = colIndex('Email');
+    const idxSegment = colIndex('Segment');
+
+    if (idxUnsub === -1 || idxStatus === -1 || idxUpdated === -1 || idxUnsubAt === -1) {
+      return res.status(500).send('Subscribers sheet headers missing required columns');
+    }
+
+    const rowIndex = rows.findIndex((r, i) => i >= 1 && (r[idxUnsub] || '') === token);
     if (rowIndex === -1) return res.status(404).send('Token not found');
 
     const row = rows[rowIndex];
+    const now = new Date().toISOString();
 
-    // Update: Status(E)=unsubscribed, Unsubscribed_At(O)=now, Updated_At(M)=now
-    row[4] = 'unsubscribed';
-    row[14] = new Date().toISOString();
-    row[12] = row[14];
+    row[idxStatus] = 'unsubscribed';
+    row[idxUnsubAt] = now;
+    row[idxUpdated] = now;
 
     // Clear token
-    row[8] = '';
+    row[idxUnsub] = '';
+
+    const email = idxEmail !== -1 ? (row[idxEmail] || '') : '';
+    const segment = idxSegment !== -1 ? (row[idxSegment] || '') : '';
 
     const sheetRowNumber = rowIndex + 1;
+    const lastColLetter = String.fromCharCode(65 + headers.length - 1);
+
     await sheets.spreadsheets.values.update({
       spreadsheetId: GOOGLE_SHEETS_ID,
-      range: `Subscribers!A${sheetRowNumber}:P${sheetRowNumber}`,
+      range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [row] }
+    });
+
+    const redirectUrl =
+      `https://www.safefreightprogram.com/unsubscribe-confirmed?` +
+      `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segment)}`;
+
+    return res.redirect(redirectUrl);
+
       valueInputOption: 'RAW',
       requestBody: { values: [row] }
     });
