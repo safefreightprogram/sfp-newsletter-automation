@@ -894,6 +894,12 @@ app.get('/api/unsubscribe', async (req, res) => {
     const token = (req.query.token || '').toString().trim();
     if (!token) return res.status(400).send('Missing token');
 
+    // NEW: edition-aware unsubscribe target (backwards compatible)
+    // If absent -> treat as "all" (old emails keep working)
+    const requestedSegment = (req.query.segment || 'all').toString().trim().toLowerCase();
+    const allowedTargets = new Set(['pro', 'driver', 'all']);
+    const target = allowedTargets.has(requestedSegment) ? requestedSegment : 'all';
+
     // Sheets client
     const auth = await google.auth.getClient({
       credentials: {
@@ -923,7 +929,7 @@ app.get('/api/unsubscribe', async (req, res) => {
     const idxEmail = colIndex('Email');
     const idxSegment = colIndex('Segment');
 
-    if ([idxUnsub, idxStatus, idxUpdated, idxUnsubAt].some(i => i === -1)) {
+    if ([idxUnsub, idxStatus, idxUpdated, idxUnsubAt, idxSegment].some(i => i === -1)) {
       return res.status(500).send('Subscribers sheet headers missing required columns');
     }
 
@@ -935,24 +941,53 @@ app.get('/api/unsubscribe', async (req, res) => {
 
     const currentStatus = (row[idxStatus] || '').toString().toLowerCase();
 
-    // Idempotent: if already unsubscribed, redirect successfully
+    // Idempotent: if already unsubscribed, redirect successfully (and preserve requested target)
     if (currentStatus === 'unsubscribed') {
       const email0 = idxEmail !== -1 ? (row[idxEmail] || '') : '';
       const segment0 = idxSegment !== -1 ? (row[idxSegment] || '') : '';
       const redirectAlready =
         `https://www.safefreightprogram.com/unsubscribe-confirmed?` +
-        `email=${encodeURIComponent(email0)}&segments=${encodeURIComponent(segment0)}&already=1`;
+        `email=${encodeURIComponent(email0)}&segments=${encodeURIComponent(segment0)}&segment=${encodeURIComponent(target)}&already=1`;
       return res.redirect(redirectAlready);
     }
 
-    row[idxStatus] = 'unsubscribed';
-    row[idxUnsubAt] = now;
+    // Parse current segments from CSV (e.g. "pro,driver")
+    const rawSegments = (row[idxSegment] || '').toString();
+    const segments = rawSegments
+      .split(',')
+      .map(s => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    let nextSegments = segments;
+
+    if (target === 'all') {
+      nextSegments = [];
+    } else {
+      nextSegments = segments.filter(s => s !== target);
+    }
+
+    // Canonicalise order for consistency: pro,driver
+    const canonical = ['pro', 'driver'];
+    const nextSegmentsCsv = canonical.filter(s => nextSegments.includes(s)).join(',');
+
+    // Update row fields
+    row[idxSegment] = nextSegmentsCsv;
     row[idxUpdated] = now;
 
-    // IMPORTANT: do NOT clear Unsub_Token (same SafeLinks double-hit issue)
+    if (nextSegments.length === 0) {
+      row[idxStatus] = 'unsubscribed';
+      row[idxUnsubAt] = now;
+    } else {
+      // Partial unsubscribe: keep active
+      row[idxStatus] = 'active';
+      // Keep Unsubscribed_At blank so it continues to mean "fully unsubscribed"
+      row[idxUnsubAt] = '';
+    }
+
+    // IMPORTANT: do NOT clear Unsub_Token (SafeLinks/scan tolerance)
 
     const email = idxEmail !== -1 ? (row[idxEmail] || '') : '';
-    const segment = idxSegment !== -1 ? (row[idxSegment] || '') : '';
+    const segmentCsv = row[idxSegment] || '';
 
     const sheetRowNumber = rowIndex + 1;
     const lastColLetter = String.fromCharCode(65 + headers.length - 1);
@@ -966,7 +1001,7 @@ app.get('/api/unsubscribe', async (req, res) => {
 
     const redirectUrl =
       `https://www.safefreightprogram.com/unsubscribe-confirmed?` +
-      `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segment)}`;
+      `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segmentCsv)}&segment=${encodeURIComponent(target)}`;
 
     return res.redirect(redirectUrl);
   } catch (e) {
