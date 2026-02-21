@@ -598,7 +598,7 @@ const html = `<!doctype html>
           <a href="https://www.safefreightprogram.com/" style="text-decoration:none;">
             <img
               src="https://www.safefreightprogram.com/assets/sfp-logo-small.png"
-              width="110"
+              width="60"
               alt="Safe Freight Program"
               style="display:block;border:0;outline:none;text-decoration:none;height:auto;"
             />
