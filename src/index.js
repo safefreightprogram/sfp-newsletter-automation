@@ -594,7 +594,11 @@ set('Segment', segmentsCsv);    set('Status', 'pending');
       'https://sfp-newsletter-automation-production.up.railway.app';
 
     const confirmUrl = `${apiBaseUrl}/api/confirm?token=${encodeURIComponent(confirmToken)}`;
-    const unsubUrl = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
+
+// NEW: segment-aware unsubscribe URLs (backwards compatible on the backend)
+const unsubUrlAll = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}&segment=all`;
+const unsubUrlPro = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}&segment=pro`;
+const unsubUrlDriver = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubToken)}&segment=driver`;
 
 
     const safeName = (name || '').trim() || 'there';
@@ -626,7 +630,40 @@ const selectedEditionsText =
 const webViewUrl =
   `https://www.safefreightprogram.com/subscribe-pending?` +
   `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segmentsArr.join(','))}`;
-
+// NEW: unsubscribe footer block (edition-aware)
+// Note: use the target segment links; show all options only when both were selected.
+const unsubscribeHtml =
+  hasPro && hasDriver
+    ? `
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:10px 0 0 0;">
+        Unsubscribe options:
+      </div>
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:6px 0 0 0;">
+        • CoR Intel Weekly:
+        <a href="${unsubUrlPro}" style="color:#1d4ed8;text-decoration:underline;">${unsubUrlPro}</a>
+      </div>
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:6px 0 0 0;">
+        • Safe Freight Mate:
+        <a href="${unsubUrlDriver}" style="color:#1d4ed8;text-decoration:underline;">${unsubUrlDriver}</a>
+      </div>
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:6px 0 0 0;">
+        • Unsubscribe all:
+        <a href="${unsubUrlAll}" style="color:#1d4ed8;text-decoration:underline;">${unsubUrlAll}</a>
+      </div>
+    `
+    : hasDriver
+      ? `
+        <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:10px 0 0 0;">
+          Unsubscribe:
+          <a href="${unsubUrlDriver}" style="color:#1d4ed8;text-decoration:underline;">${unsubUrlDriver}</a>
+        </div>
+      `
+      : `
+        <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:10px 0 0 0;">
+          Unsubscribe:
+          <a href="${unsubUrlPro}" style="color:#1d4ed8;text-decoration:underline;">${unsubUrlPro}</a>
+        </div>
+      `;
 const html = `<!doctype html>
 <html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
@@ -751,10 +788,7 @@ const html = `<!doctype html>
                       <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:0;">
                         If you did not request this subscription, you can ignore this email.
                       </div>
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:10px 0 0 0;">
-                        Unsubscribe immediately:
-                        <a href="${unsubUrl}" style="color:#1d4ed8;text-decoration:underline;">${unsubUrl}</a>
-                      </div>
+                     ${unsubscribeHtml}
                       <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:10px 0 0 0;">
                         Safe Freight Program — compliance-grade freight assurance.
                       </div>
