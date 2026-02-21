@@ -457,16 +457,33 @@ app.get('/api/subscribers/:segment?', async (req, res) => {
 
 app.post('/api/subscribers', async (req, res) => {
   try {
-    const { email, name, segment, company, role } = req.body || {};
-
+const { email, name, segment, segments, company, role } = req.body || {};
+    
     // --- Validate ---
-    if (!email || !segment) {
-      return res.status(400).json({ success: false, error: 'Email and segment are required' });
-    }
-    if (!['pro', 'driver'].includes(segment)) {
-      return res.status(400).json({ success: false, error: 'Segment must be "pro" or "driver"' });
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+if (!email) {
+  return res.status(400).json({ success: false, error: 'Email is required' });
+}
+
+// Accept either `segments: []` or legacy `segment: ""`
+let segmentsArr = [];
+if (Array.isArray(segments)) {
+  segmentsArr = segments;
+} else if (typeof segment === 'string' && segment.trim()) {
+  segmentsArr = [segment.trim()];
+}
+
+segmentsArr = [...new Set(segmentsArr.map(s => String(s).trim()).filter(Boolean))];
+
+if (segmentsArr.length === 0) {
+  return res.status(400).json({ success: false, error: 'At least one segment is required' });
+}
+
+const allowedSegments = new Set(['pro', 'driver']);
+for (const s of segmentsArr) {
+  if (!allowedSegments.has(s)) {
+    return res.status(400).json({ success: false, error: 'Segments must be "pro" and/or "driver"' });
+  }
+}    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ success: false, error: 'Invalid email format' });
     }
@@ -521,8 +538,8 @@ range: 'Subscribers!A:Z',
     set('Subscriber_ID', subscriberId);
     set('Email', email);
     set('Name', name || '');
-    set('Segment', segment);
-    set('Status', 'pending');
+const segmentsCsv = segmentsArr.join(',');
+set('Segment', segmentsCsv);    set('Status', 'pending');
     set('Source_IP', req.ip || '');
     set('Subscribed_At', now);
     set('Confirm_Token', confirmToken);
@@ -559,15 +576,34 @@ range: 'Subscribers!A:Z',
 
 
     const safeName = (name || '').trim() || 'there';
-    const subject =
-      segment === 'driver'
-        ? 'Confirm your Safe Freight Mate subscription'
-        : 'Confirm your CoR Intel Weekly subscription';
 
-const brandName = segment === 'driver' ? 'Safe Freight Mate' : 'CoR Intel Weekly';
+const hasPro = segmentsArr.includes('pro');
+const hasDriver = segmentsArr.includes('driver');
+
+const subject =
+  hasPro && hasDriver
+    ? 'Confirm your Safe Freight Intel subscriptions'
+    : hasDriver
+      ? 'Confirm your Safe Freight Mate subscription'
+      : 'Confirm your CoR Intel Weekly subscription';
+
+const brandName =
+  hasPro && hasDriver
+    ? 'Safe Freight Intel'
+    : hasDriver
+      ? 'Safe Freight Mate'
+      : 'CoR Intel Weekly';
+
+const selectedEditionsText =
+  hasPro && hasDriver
+    ? 'CoR Intel Weekly and Safe Freight Mate'
+    : hasDriver
+      ? 'Safe Freight Mate'
+      : 'CoR Intel Weekly';
+
 const webViewUrl =
   `https://www.safefreightprogram.com/subscribe-pending?` +
-  `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segment)}`;
+  `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segmentsArr.join(','))}`;
 
 const html = `<!doctype html>
 <html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -631,7 +667,7 @@ const html = `<!doctype html>
                   <tr>
                     <td style="padding:0 0 16px 0;">
                       <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#111827;margin:0;">
-                        You’re one step away from activating <strong>${brandName}</strong>.
+                        You’re one step away from activating <strong>${selectedEditionsText}</strong>.
                         Please confirm your email address to complete signup.
                       </div>
                     </td>
