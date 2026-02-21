@@ -352,7 +352,8 @@ if (segmentMatch) {
       if (email && 
           email.includes('@') && 
           subscriberSegment && 
-          subscriberSegment.toLowerCase() === segment.toLowerCase() &&
+          subscriberSegment &&
+subscriberSegment.toString().toLowerCase().split(',').map(s => s.trim()).includes(segment.toLowerCase()) &&
           status && 
           status.toLowerCase() === 'active') {
         
