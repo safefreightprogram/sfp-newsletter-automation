@@ -245,16 +245,21 @@ async getSubscribersFromSheet(segment) {
           }
         }
         
-        // Check segment match
-        const segmentMatch = (
-          subscriberSegment && 
-          (subscriberSegment.toLowerCase() === segment.toLowerCase() ||
-           subscriberSegment.toLowerCase() === 'all' ||
-           (segment === 'pro' && subscriberSegment.toLowerCase() === 'professional'))
-        );
-        
-        if (segmentMatch) {
-          subscribers.push({
+        // Check segment match (supports CSV e.g. "pro,driver")
+const segRaw = (subscriberSegment || '').toString().trim().toLowerCase();
+
+const segList = segRaw
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+const segmentMatch =
+  segList.includes(segment.toLowerCase()) ||
+  segList.includes('all') ||
+  (segment.toLowerCase() === 'pro' && segList.includes('professional'));
+
+if (segmentMatch) {
+  subscribers.push({
             email: email.trim(),
             name: (name || '').trim(),
             segment: subscriberSegment.trim(),
