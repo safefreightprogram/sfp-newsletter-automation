@@ -564,23 +564,163 @@ range: 'Subscribers!A:Z',
         ? 'Confirm your Safe Freight Mate subscription'
         : 'Confirm your CoR Intel Weekly subscription';
 
-    const html = `
-      <div style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;color:#111;">
-        <h2 style="margin:0 0 12px;">Almost there, ${safeName}.</h2>
-        <p style="margin:0 0 12px;">
-          Please confirm your subscription by clicking the button below.
-        </p>
-        <p style="margin:18px 0;">
-          <a href="${confirmUrl}" style="display:inline-block;padding:12px 16px;border-radius:8px;background:#1d4ed8;color:#fff;text-decoration:none;">
-            Confirm subscription
-          </a>
-        </p>
-        <p style="margin:18px 0 0;font-size:12px;color:#444;">
-          If you didn’t request this, ignore this email.<br/>
-          Unsubscribe link: <a href="${unsubUrl}">${unsubUrl}</a>
-        </p>
-      </div>
-    `;
+const brandName = segment === 'driver' ? 'Safe Freight Mate' : 'CoR Intel Weekly';
+const webViewUrl =
+  `https://www.safefreightprogram.com/subscribe-pending?` +
+  `email=${encodeURIComponent(email)}&segments=${encodeURIComponent(segment)}`;
+
+const html = `<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="x-apple-disable-message-reformatting">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <title>Confirm subscription</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f3f4f6;">
+    <!-- Preheader (hidden) -->
+    <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">
+      Confirm your email address to activate ${brandName}.
+    </div>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background-color:#f3f4f6;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <!-- Container -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;max-width:600px;border-collapse:collapse;">
+            <!-- Top utility row -->
+            <tr>
+              <td style="padding:0 0 12px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                  <tr>
+                    <td align="left" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;color:#6b7280;">
+                      Safe Freight Program
+                    </td>
+                    <td align="right" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;color:#6b7280;">
+                      <a href="${webViewUrl}" style="color:#1d4ed8;text-decoration:underline;">View online</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Card -->
+            <tr>
+              <td style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                  <!-- Header -->
+                  <tr>
+                    <td style="padding:0 0 12px 0;">
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:24px;color:#111827;font-weight:700;margin:0;">
+                        Confirm your subscription
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Body copy -->
+                  <tr>
+                    <td style="padding:0 0 12px 0;">
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#111827;margin:0;">
+                        Hi ${safeName},
+                      </div>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style="padding:0 0 16px 0;">
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;color:#111827;margin:0;">
+                        You’re one step away from activating <strong>${brandName}</strong>.
+                        Please confirm your email address to complete signup.
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- CTA button (bulletproof with Outlook VML) -->
+                  <tr>
+                    <td align="left" style="padding:0 0 18px 0;">
+                      <!--[if mso]>
+                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+                          href="${confirmUrl}" style="height:44px;v-text-anchor:middle;width:240px;" arcsize="10%" stroke="f" fillcolor="#1d4ed8">
+                          <w:anchorlock/>
+                          <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;">
+                            Confirm subscription
+                          </center>
+                        </v:roundrect>
+                      <![endif]-->
+                      <!--[if !mso]><!-- -->
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                          <tr>
+                            <td bgcolor="#1d4ed8" style="border-radius:10px;">
+                              <a href="${confirmUrl}"
+                                 style="display:inline-block;padding:12px 18px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:20px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">
+                                Confirm subscription
+                              </a>
+                            </td>
+                          </tr>
+                        </table>
+                      <!--<![endif]-->
+                    </td>
+                  </tr>
+
+                  <!-- Fallback link -->
+                  <tr>
+                    <td style="padding:0 0 14px 0;">
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#374151;margin:0;">
+                        If the button doesn’t work, copy and paste this link into your browser:
+                      </div>
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#111827;word-break:break-all;margin:6px 0 0 0;">
+                        <a href="${confirmUrl}" style="color:#1d4ed8;text-decoration:underline;">${confirmUrl}</a>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Divider -->
+                  <tr>
+                    <td style="padding:12px 0;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                        <tr>
+                          <td style="border-top:1px solid #e5e7eb;font-size:0;line-height:0;">&nbsp;</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="padding:0;">
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:0;">
+                        If you did not request this subscription, you can ignore this email.
+                      </div>
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:10px 0 0 0;">
+                        Unsubscribe immediately:
+                        <a href="${unsubUrl}" style="color:#1d4ed8;text-decoration:underline;">${unsubUrl}</a>
+                      </div>
+                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#6b7280;margin:10px 0 0 0;">
+                        Safe Freight Program — compliance-grade freight assurance.
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Legal/spacing -->
+            <tr>
+              <td style="padding:14px 6px 0 6px;">
+                <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:16px;color:#9ca3af;text-align:center;">
+                  You are receiving this because an address was entered at safefreightprogram.com.
+                </div>
+              </td>
+            </tr>
+
+          </table>
+          <!-- /Container -->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
 
     await sendResendEmail({ to: email, subject, html });
 
