@@ -442,13 +442,35 @@ app.get('/api/subscribers/:segment?', async (req, res) => {
         emailSender.getSubscribersFromSheet('pro'),
         emailSender.getSubscribersFromSheet('driver')
       ]);
-      return res.json({
-        success: true,
-        data: {
-          pro: { count: pro.length, subscribers: pro },
-          driver: { count: driver.length, subscribers: driver }
-        }
-      });
+      // Counts: treat "active" as the truth for totals (future-proof)
+const proActive = pro.filter(s => (s.status || '').toLowerCase() === 'active');
+const driverActive = driver.filter(s => (s.status || '').toLowerCase() === 'active');
+
+// Unique active subscribers = unique emails across both active lists
+const uniqueActiveEmails = new Set(
+  [...proActive, ...driverActive]
+    .map(s => (s.email || '').trim().toLowerCase())
+    .filter(Boolean)
+);
+
+return res.json({
+  success: true,
+  data: {
+    summary: {
+      // Unique people
+      totalActiveSubscribers: uniqueActiveEmails.size,
+
+      // Subscriptions (double-counts dual opt-in by design)
+      totalActiveSubscriptions: proActive.length + driverActive.length,
+
+      // Segment subscription counts
+      proActive: proActive.length,
+      driverActive: driverActive.length
+    },
+    pro: { count: pro.length, subscribers: pro },
+    driver: { count: driver.length, subscribers: driver }
+  }
+});
     }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
