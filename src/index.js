@@ -522,28 +522,44 @@ for (const s of segmentsArr) {
     const GOOGLE_SHEETS_ID = process.env.GOOGLE_SHEETS_ID;
 
     // --- Prevent duplicates (by email, any segment) ---
-    const existingCheck = await sheets.spreadsheets.values.get({
-      spreadsheetId: GOOGLE_SHEETS_ID,
-range: 'Subscribers!A:Z',
-    });
-    const existingRows = existingCheck.data.values || [];
-    for (let i = 1; i < existingRows.length; i++) {
-      if ((existingRows[i][1] || '').toLowerCase() === email.toLowerCase()) {
-        return res.status(409).json({ success: false, error: 'Subscriber already exists' });
-      }
-    }
+   // --- Load sheet once (headers + rows) ---
+const existingCheck = await sheets.spreadsheets.values.get({
+  spreadsheetId: GOOGLE_SHEETS_ID,
+  range: 'Subscribers!A:Z',
+});
+const existingRows = existingCheck.data.values || [];
+const headers = (existingRows[0] || []).map(h => (h || '').toString().trim());
 
-      // --- Read headers so we can write into the correct columns even if the sheet changes ---
-    const headerResp = await sheets.spreadsheets.values.get({
-      spreadsheetId: GOOGLE_SHEETS_ID,
-      range: 'Subscribers!A1:Z1'
-    });
-    const headers = (headerResp.data.values?.[0] || []).map(h => (h || '').toString().trim());
+const colIndex = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+// Identify whether this email already exists
+let existingRowIndex = -1; // index into existingRows (0 = header row)
+for (let i = 1; i < existingRows.length; i++) {
+  if (((existingRows[i][colIndex('Email')] || existingRows[i][1] || '')).toString().toLowerCase() === email.toLowerCase()) {
+    existingRowIndex = i;
+    break;
+  }
+}
+
+// If exists and NOT unsubscribed -> keep current behaviour (409)
+if (existingRowIndex !== -1) {
+  const idxStatus = colIndex('Status');
+  const existingStatus = idxStatus !== -1 ? (existingRows[existingRowIndex][idxStatus] || '').toString().toLowerCase() : '';
+  if (existingStatus !== 'unsubscribed') {
+    return res.status(409).json({ success: false, error: 'Subscriber already exists' });
+  }
+}
 
     const colIndex = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
 
     // Helper: create an output row sized to header length
-    const outRow = new Array(headers.length).fill('');
+// If re-subscribing, start from existing row values to preserve any columns you don't explicitly set.
+const outRow = new Array(headers.length).fill('');
+
+if (existingRowIndex !== -1) {
+  const existing = existingRows[existingRowIndex] || [];
+  for (let i = 0; i < outRow.length; i++) outRow[i] = existing[i] ?? '';
+}
 
     const set = (headerName, value) => {
       const i = colIndex(headerName);
@@ -577,13 +593,27 @@ set('Segment', segmentsCsv);    set('Status', 'pending');
     set('Resume_At', '');
 
 
-   await sheets.spreadsheets.values.append({
-  spreadsheetId: GOOGLE_SHEETS_ID,
-  range: 'Subscribers!A:Z',
-  valueInputOption: 'RAW',
-  insertDataOption: 'INSERT_ROWS',
-  requestBody: { values: [outRow] }
-});
+  if (existingRowIndex === -1) {
+  // New subscriber -> append
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: GOOGLE_SHEETS_ID,
+    range: 'Subscribers!A:Z',
+    valueInputOption: 'RAW',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [outRow] }
+  });
+} else {
+  // Re-subscribe -> update existing row in place
+  const sheetRowNumber = existingRowIndex + 1; // sheets are 1-indexed
+  const lastColLetter = String.fromCharCode(65 + headers.length - 1);
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: GOOGLE_SHEETS_ID,
+    range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
+    valueInputOption: 'RAW',
+    requestBody: { values: [outRow] }
+  });
+}
 
 
     // --- Email confirm + unsubscribe links ---
