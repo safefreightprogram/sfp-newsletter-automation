@@ -632,51 +632,7 @@ if (existingRowIndex !== -1) {
 
   // Else: unsubscribed but never confirmed -> fall through to pending + confirmation email path below.
 }
-    const now = new Date().toISOString();
 
-    const rawExisting = idxSegment !== -1 ? (existingRows[existingRowIndex][idxSegment] || '').toString() : '';
-    const existingSegs = rawExisting
-      .split(',')
-      .map(s => s.trim().toLowerCase())
-      .filter(Boolean);
-
-    const mergedSet = new Set([...existingSegs, ...segmentsArr.map(s => s.trim().toLowerCase())]);
-
-    // Canonicalise order for consistency: pro,driver
-    const canonical = ['pro', 'driver'];
-    const mergedCsv = canonical.filter(s => mergedSet.has(s)).join(',');
-
-    // If no change, don't touch the row
-    const existingCanonicalCsv = canonical.filter(s => existingSegs.includes(s)).join(',');
-    if (mergedCsv === existingCanonicalCsv) {
-      return res.json({
-        success: true,
-        message: 'Subscriber already subscribed to selected list(s)',
-        data: { email, segments: mergedCsv, status: existingStatus }
-      });
-    }
-
-    // Update row in-place
-    if (idxSegment !== -1) existingRows[existingRowIndex][idxSegment] = mergedCsv;
-    if (idxUpdated !== -1) existingRows[existingRowIndex][idxUpdated] = now;
-
-    const sheetRowNumber = existingRowIndex + 1; // sheets are 1-indexed
-    const lastColLetter = String.fromCharCode(65 + headers.length - 1);
-
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: GOOGLE_SHEETS_ID,
-      range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
-      valueInputOption: 'RAW',
-      requestBody: { values: [existingRows[existingRowIndex]] }
-    });
-
-    return res.json({
-      success: true,
-      message: 'Subscription updated successfully',
-      data: { email, segments: mergedCsv, status: existingStatus }
-    });
-  }
-}
 
 // NOTE: do not redefine colIndex again below (avoid duplicate const)
 
