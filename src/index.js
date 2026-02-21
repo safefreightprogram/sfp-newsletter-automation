@@ -541,18 +541,97 @@ for (let i = 1; i < existingRows.length; i++) {
   }
 }
 
-// If exists and NOT unsubscribed -> allow "add segment" by merging Segment CSV
+// If exists -> either (a) add segment immediately, or (b) reactivate immediately if previously confirmed.
 if (existingRowIndex !== -1) {
   const idxStatus = colIndex('Status');
   const idxSegment = colIndex('Segment');
   const idxUpdated = colIndex('Updated_At');
+  const idxConfirmedAt = colIndex('Confirmed_At');
+  const idxUnsubAt = colIndex('Unsubscribed_At');
 
   const existingStatus =
     idxStatus !== -1
       ? (existingRows[existingRowIndex][idxStatus] || '').toString().trim().toLowerCase()
       : '';
 
+  const confirmedAt =
+    idxConfirmedAt !== -1
+      ? (existingRows[existingRowIndex][idxConfirmedAt] || '').toString().trim()
+      : '';
+
+  const now = new Date().toISOString();
+
+  // Parse existing segments
+  const rawExisting = idxSegment !== -1 ? (existingRows[existingRowIndex][idxSegment] || '').toString() : '';
+  const existingSegs = rawExisting
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  // Merge requested segments with existing, canonical order: pro,driver
+  const mergedSet = new Set([...existingSegs, ...segmentsArr.map(s => String(s).trim().toLowerCase())]);
+  const canonical = ['pro', 'driver'];
+  const mergedCsv = canonical.filter(s => mergedSet.has(s)).join(',');
+
+  // Case A: Existing subscriber is not unsubscribed -> "add segment" path (no reconfirm)
   if (existingStatus !== 'unsubscribed') {
+    const existingCanonicalCsv = canonical.filter(s => existingSegs.includes(s)).join(',');
+
+    if (mergedCsv === existingCanonicalCsv) {
+      return res.json({
+        success: true,
+        message: 'Subscriber already subscribed to selected list(s)',
+        data: { email, segments: mergedCsv, status: existingStatus }
+      });
+    }
+
+    if (idxSegment !== -1) existingRows[existingRowIndex][idxSegment] = mergedCsv;
+    if (idxUpdated !== -1) existingRows[existingRowIndex][idxUpdated] = now;
+
+    const sheetRowNumber = existingRowIndex + 1; // sheets are 1-indexed
+    const lastColLetter = String.fromCharCode(65 + headers.length - 1);
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [existingRows[existingRowIndex]] }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Subscription updated successfully',
+      data: { email, segments: mergedCsv, status: existingStatus }
+    });
+  }
+
+  // Case B: Existing subscriber IS unsubscribed
+  // If they have previously confirmed, reactivate immediately (no pending, no email).
+  if (existingStatus === 'unsubscribed' && confirmedAt) {
+    if (idxSegment !== -1) existingRows[existingRowIndex][idxSegment] = mergedCsv || rawExisting;
+    if (idxStatus !== -1) existingRows[existingRowIndex][idxStatus] = 'active';
+    if (idxUnsubAt !== -1) existingRows[existingRowIndex][idxUnsubAt] = '';
+    if (idxUpdated !== -1) existingRows[existingRowIndex][idxUpdated] = now;
+
+    const sheetRowNumber = existingRowIndex + 1; // sheets are 1-indexed
+    const lastColLetter = String.fromCharCode(65 + headers.length - 1);
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: GOOGLE_SHEETS_ID,
+      range: `Subscribers!A${sheetRowNumber}:${lastColLetter}${sheetRowNumber}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [existingRows[existingRowIndex]] }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Subscription reactivated successfully',
+      data: { email, segments: (existingRows[existingRowIndex][idxSegment] || '').toString(), status: 'active' }
+    });
+  }
+
+  // Else: unsubscribed but never confirmed -> fall through to pending + confirmation email path below.
+}
     const now = new Date().toISOString();
 
     const rawExisting = idxSegment !== -1 ? (existingRows[existingRowIndex][idxSegment] || '').toString() : '';
