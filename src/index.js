@@ -589,21 +589,30 @@ const html = `<!doctype html>
         <td align="center" style="padding:24px 12px;">
           <!-- Container -->
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:600px;max-width:600px;border-collapse:collapse;">
-            <!-- Top utility row -->
-            <tr>
-              <td style="padding:0 0 12px 0;">
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
-                  <tr>
-                    <td align="left" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;color:#6b7280;">
-                      Safe Freight Program
-                    </td>
-                    <td align="right" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;color:#6b7280;">
-                      <a href="${webViewUrl}" style="color:#1d4ed8;text-decoration:underline;">View online</a>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
+            <!-- Website-style header -->
+<tr>
+  <td style="padding:0 0 12px 0;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;background-color:#1e40af;border-radius:12px;overflow:hidden;">
+      <tr>
+        <td align="left" style="padding:14px 16px;">
+          <a href="https://www.safefreightprogram.com/" style="text-decoration:none;">
+            <img
+              src="https://www.safefreightprogram.com/assets/sfp-logo-small.png"
+              width="140"
+              alt="Safe Freight Program"
+              style="display:block;border:0;outline:none;text-decoration:none;height:auto;"
+            />
+          </a>
+        </td>
+        <td align="right" style="padding:14px 16px;">
+          <a href="${webViewUrl}" style="font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:16px;color:#ffffff;text-decoration:underline;">
+            View online
+          </a>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
 
             <!-- Card -->
             <tr>
@@ -620,14 +629,7 @@ const html = `<!doctype html>
     />
   </td>
 </tr>
-                  <!-- Header -->
-                  <tr>
-                    <td style="padding:0 0 12px 0;">
-                      <div style="font-family:Arial,Helvetica,sans-serif;font-size:18px;line-height:24px;color:#111827;font-weight:700;margin:0;">
-                        Confirm your subscription
-                      </div>
-                    </td>
-                  </tr>
+                 
 
                   <!-- Body copy -->
                   <tr>
