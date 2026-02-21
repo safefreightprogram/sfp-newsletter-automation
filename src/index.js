@@ -598,7 +598,7 @@ const html = `<!doctype html>
           <a href="https://www.safefreightprogram.com/" style="text-decoration:none;">
             <img
               src="https://www.safefreightprogram.com/assets/sfp-logo-small.png"
-              width="140"
+              width="110"
               alt="Safe Freight Program"
               style="display:block;border:0;outline:none;text-decoration:none;height:auto;"
             />
@@ -618,19 +618,7 @@ const html = `<!doctype html>
             <tr>
               <td style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
-                  <!-- Logo -->
-<tr>
-  <td align="left" style="padding:0 0 14px 0;">
-    <img
-      src="https://www.safefreightprogram.com/assets/sfp-logo-small.png"
-      width="180"
-      alt="Safe Freight Program"
-      style="display:block;border:0;outline:none;text-decoration:none;height:auto;"
-    />
-  </td>
-</tr>
-                 
-
+                
                   <!-- Body copy -->
                   <tr>
                     <td style="padding:0 0 12px 0;">
