@@ -229,6 +229,8 @@ async getSubscribersFromSheet(segment) {
         const company        = safeCell(row, companyCol);
         const confirmedAt    = safeCell(row, confirmedCol);
         const unsubToken     = safeCell(row, unsubTokenCol); // FIX: fetch token
+                console.log(`DEBUG: email=${email}, unsubTokenCol=${unsubTokenCol}, rowLength=${row.length}, unsubToken="${unsubToken}"`);
+
 
         
         // Validate email
