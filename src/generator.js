@@ -98,6 +98,8 @@ class NewsletterGenerator {
         /geotab connect/i, /megatrans/i, /\bconference\b.*\bfocus/i,
         /traffic alert/i, /road works/i, /night works/i, /bridge closure/i, /changed traffic/i,
         /traffic conditions/i, /cyclone.*reconstruction/i, /hwy.*closure/i,
+        /university.*study/i, /study.*university/i, /research.*finds/i, /new.*research/i,
+        /public health/i, /air quality/i, /noise pollution/i, /\bstudy\b.*health/i,
         /new model launch/i, /product launch/i, /enters.+market/i
       ];
 
@@ -124,24 +126,56 @@ class NewsletterGenerator {
         return true;
       });
 
-      const poolForSelection = sourceFiltered.length >= 5 ? sourceFiltered : recentArticles;
-      if (sourceFiltered.length < 5) {
-        console.log(`⚠️ Pre-filter left fewer than 5 articles — using full pool as fallback`);
+      const poolForSelection = sourceFiltered.length >= 4 ? sourceFiltered : recentArticles;
+      if (sourceFiltered.length < 4) {
+        console.log(`⚠️ Pre-filter left fewer than 4 articles — using full pool as fallback`);
       }
 
-      // Select top articles (already prioritized)
-      const selectedArticles = poolForSelection.slice(0, 5);
-      console.log(`✂️ Selected top ${selectedArticles.length} articles for processing`);
-      
+      // Select top 4 compliance articles
+      const complianceArticles = poolForSelection.slice(0, 4);
+
+      // "From the Industry" slot — pick the highest-scoring article from the FULL pool
+      // that didn't make the compliance top 4, preferring human interest / industry culture content
+      const humanInterestPatterns = [
+        /truckie/i, /driver.*story/i, /long.service/i, /community/i,
+        /milestone/i, /record.*run/i, /industry.*leader/i, /tribute/i,
+        /behind.*wheel/i, /on.*road/i, /innovation/i, /technology/i,
+        /electric/i, /hydrogen/i, /autonomous/i, /future.*freight/i,
+        /new.*truck/i, /new.*vehicle/i, /launch/i, /unveil/i
+      ];
+
+      const usedUrls = new Set(complianceArticles.map(a => a.url));
+      const remainingPool = recentArticles.filter(a => !usedUrls.has(a.url));
+
+      // Prefer articles that match human interest patterns; fall back to best remaining
+      let industryStory = remainingPool.find(a =>
+        humanInterestPatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
+      ) || remainingPool[0];
+
+      if (industryStory) {
+        industryStory = { ...industryStory, category: 'From the Industry' };
+        console.log(`📰 Industry slot: ${industryStory.title.substring(0, 60)}...`);
+      }
+
+      const selectedArticles = industryStory
+        ? [...complianceArticles, industryStory]
+        : complianceArticles;
+
+      console.log(`✂️ Selected ${complianceArticles.length} compliance + ${industryStory ? 1 : 0} industry articles`);
+
       // Show selected articles with priorities
       console.log('\n📖 Articles being processed (in priority order):');
       selectedArticles.forEach((article, i) => {
         console.log(`${i + 1}. [${article.category || 'Uncategorized'}] ${article.title.substring(0, 60)}...`);
         console.log(`   📊 Score: ${article.compositeScore?.toFixed(1) || article.relevanceScore || 'N/A'} | Source: ${article.source}`);
       });
-      
-      // Process articles with OpenAI (enhanced with URL protection and targeted tips)
-      const processedArticles = await this.processWithOpenAI(selectedArticles, segment);
+
+      // Process compliance articles and industry story separately
+      const complianceProcessed = await this.processWithOpenAI(complianceArticles, segment);
+      const industryProcessed = industryStory
+        ? await this.processIndustryStory(industryStory, segment)
+        : [];
+      const processedArticles = [...complianceProcessed, ...industryProcessed];
       
       // Generate newsletter HTML with logo and one-click unsubscribe
       const newsletterHtml = this.buildComplianceNewsletterHTML(processedArticles, segment);
@@ -277,13 +311,15 @@ const newsletterResult = {
   prioritizeByCategory(articles) {
     console.log('🎯 Applying category-based prioritization...');
 
+    // Category priority — Driver Wellness intentionally low for pro segment
+    // It ranks higher in the driver segment (Safe Freight Mate) via separate logic
     const categoryPriority = {
       'Safety Alert': 100,
       'Enforcement Action': 90,
       'Regulatory Update': 80,
       'Technical Update': 70,
-      'Driver Wellness': 65,
-      'Industry News': 60
+      'Industry News': 60,
+      'Driver Wellness': 40  // Pro newsletter: wellness is Safe Freight Mate territory
     };
 
     // Geographic relevance markers
@@ -692,6 +728,8 @@ For each article, provide:
   "category": "Choose from: Safety Alert, Enforcement Action, Regulatory Update, Technical Update, Driver Wellness, Industry News"
 }
 
+Note: the final article in each batch may already have category set to "From the Industry" — preserve that category as-is.
+
 ACTION TIP REQUIREMENTS — CRITICAL:
 - Be direct and specific about WHAT to check or do, not just that a review should happen.
 - Identify at least one specific focus area drawn directly from the article — a particular obligation, document, process, or metric that is relevant to the story.
@@ -733,6 +771,8 @@ For each article, provide:
   "source": "Original source name",
   "category": "Choose from: Safety Alert, Enforcement Action, Regulatory Update, Technical Update, Driver Wellness, Industry News"
 }
+
+Note: the final article in each batch may already have category set to "From the Industry" — preserve that category as-is.
 
 ACTION TIP REQUIREMENTS — CRITICAL:
 - Be direct and specific. Tell the driver exactly what to check or do — not just that something needs reviewing.
@@ -809,7 +849,7 @@ Return only valid JSON array:\n\n${JSON.stringify(articles, null, 2)}`;
         }
         
         // Validate category
-        const validCategories = ['Safety Alert', 'Enforcement Action', 'Regulatory Update', 'Technical Update', 'Driver Wellness', 'Industry News'];
+        const validCategories = ['Safety Alert', 'Enforcement Action', 'Regulatory Update', 'Technical Update', 'Driver Wellness', 'Industry News', 'From the Industry'];
         if (!validCategories.includes(processed.category)) {
           processed.category = 'Industry News';
         }
@@ -1151,6 +1191,70 @@ const pauseUrl = '{{PAUSE_URL}}';
 </html>`;
 }
 
+  // Process the "From the Industry" fifth slot with a lighter, conversational tone
+  async processIndustryStory(article, segment) {
+    const systemPrompt = `You are writing the final item in a professional Australian transport newsletter. This slot is called "From the Industry" and is intentionally lighter in tone — it is the human interest or interesting innovation story at the end of the edition, designed to reward readers who make it to the bottom.
+
+CRITICAL: You must NEVER modify, create, or fabricate URLs. Use the EXACT original URL provided.
+
+LANGUAGE: Australian English, British spelling. Conversational but professional — written for experienced transport industry people.
+
+OUTPUT FORMAT: Return ONLY a valid JSON array containing ONE object. No markdown, no backticks.
+
+{
+  "title": "Engaging headline that a transport professional would want to click",
+  "summary": "2-3 sentences in a natural, readable tone. No forced compliance angle. Just tell the story — what happened, why it's interesting, what it means for the industry. This can be about a new vehicle, an industry milestone, an innovation, a person, or anything genuinely interesting to people who work in transport.",
+  "tip": "A single 'Worth knowing' observation — one sentence that gives the reader something to think about or take away. It does NOT need to be an action. It can be an observation, a fact, or a question worth considering. Do NOT force a compliance angle. Do NOT use hedging language.",
+  "url": "EXACT original URL — never modify",
+  "source": "Original source name",
+  "category": "From the Industry"
+}`;
+
+    const userPrompt = `Write a "From the Industry" newsletter entry for this article. Make it readable and interesting — no forced compliance framing. CRITICAL: Use the exact original URL.\n\n${JSON.stringify([article], null, 2)}`;
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.3,
+        max_tokens: 600
+      });
+
+      let responseContent = response.choices[0].message.content.trim()
+        .replace(/```json\s*/g, '')
+        .replace(/```\s*$/g, '')
+        .trim();
+
+      const parsed = JSON.parse(responseContent);
+      const result = Array.isArray(parsed) ? parsed : [parsed];
+
+      // Preserve ID and URL
+      result.forEach(item => {
+        item.id = article.id;
+        item.url = article.url;
+        item.category = 'From the Industry';
+      });
+
+      console.log(`✅ Industry story processed: ${result[0]?.title?.substring(0, 50)}...`);
+      return result;
+
+    } catch (error) {
+      console.error('⚠️ Industry story processing failed, using raw article:', error.message);
+      return [{
+        id: article.id,
+        title: article.title,
+        summary: article.summary || '',
+        tip: 'Worth keeping an eye on.',
+        url: article.url,
+        source: article.source,
+        category: 'From the Industry'
+      }];
+    }
+  }
+
   getCategoryStyle(category) {
   const categoryStyles = {
     'Safety Alert': { 
@@ -1176,7 +1280,11 @@ const pauseUrl = '{{PAUSE_URL}}';
     'Industry News': { 
       bgColor: '#f1f5f9', 
       textColor: '#475569' 
-    }         // Gray - lowest priority
+    },        // Gray - lowest priority
+    'From the Industry': {
+      bgColor: '#fef9ee',
+      textColor: '#b45309'
+    }          // Warm amber - human interest slot
   };
   
   return categoryStyles[category] || categoryStyles['Industry News'];
