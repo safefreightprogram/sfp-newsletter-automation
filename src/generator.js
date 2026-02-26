@@ -85,8 +85,35 @@ class NewsletterGenerator {
         throw new Error(`Insufficient content: only ${recentArticles.length} articles available`);
       }
       
+      // Pre-filter: exclude pure advocacy/lobbying/market news with no compliance action for duty holders
+      // These are identifiable by title/summary patterns that signal no operational obligation
+      const advocacyPatterns = [
+        /fuel tax/i, /tax hike/i, /road user charge/i, /levy increase/i,
+        /industry lobbying/i, /calls for government/i, /urges government/i,
+        /must reject/i, /rejects proposal/i,
+        /truck sales/i, /vehicle sales/i, /sales soften/i, /sales decline/i,
+        /market share/i, /production milestone/i, /record half.year/i,
+        /stock market/i, /merger/i, /acquisition/i, /ipo/i,
+        /conference registrations/i, /registrations open/i, /awards/i, /australia day honour/i,
+        /new model launch/i, /product launch/i, /enters.+market/i
+      ];
+
+      const complianceFiltered = recentArticles.filter(article => {
+        const text = (article.title + ' ' + (article.summary || '')).toLowerCase();
+        const isAdvocacy = advocacyPatterns.some(p => p.test(text));
+        if (isAdvocacy) {
+          console.log(`🚫 Pre-filter excluded (advocacy/market): ${article.title.substring(0, 60)}...`);
+        }
+        return !isAdvocacy;
+      });
+
+      const poolForSelection = complianceFiltered.length >= 5 ? complianceFiltered : recentArticles;
+      if (complianceFiltered.length < 5) {
+        console.log(`⚠️ Pre-filter left fewer than 5 articles — using full pool as fallback`);
+      }
+
       // Select top articles (already prioritized)
-      const selectedArticles = recentArticles.slice(0, 5);
+      const selectedArticles = poolForSelection.slice(0, 5);
       console.log(`✂️ Selected top ${selectedArticles.length} articles for processing`);
       
       // Show selected articles with priorities
@@ -711,7 +738,19 @@ PRIORITY ORDER (most important first):
 5. Driver Wellness - fatigue, health, mental wellbeing
 6. Industry News - conditions, pay, job market`;
 
-    const userPrompt = `Process these ${articles.length} Australian transport articles. CRITICAL: Use exact original URLs without any modification. Return only valid JSON array:\n\n${JSON.stringify(articles, null, 2)}`;
+    const userPrompt = `Process these ${articles.length} Australian transport articles into newsletter entries.
+
+CRITICAL RULES:
+1. Use EXACT original URLs — never modify, shorten, or fabricate URLs.
+2. Return ONLY a valid JSON array. No markdown, no backticks, no preamble.
+
+FOR EACH ARTICLE, your action tip MUST:
+- Name at least one SPECIFIC thing from the article itself: a named standard, a specific figure, a particular obligation, a named provision, a specific vehicle type, a specific route or corridor, a specific enforcement target. Generic instructions like "conduct a review" or "ensure compliance" are NOT acceptable unless paired with a specific focus drawn from the article.
+- If the article mentions a specific fine amount, name it. If it names a specific vehicle standard, name it. If it names a specific NHVR operation or blitz target, name it. If it names a specific document or instrument, name it.
+- Do NOT add deadlines unless the article explicitly states one.
+- Direct actions to compliance functions, not named roles.
+
+Return only valid JSON array:\n\n${JSON.stringify(articles, null, 2)}`;
 
     try {
       const response = await this.openai.chat.completions.create({
