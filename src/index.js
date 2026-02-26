@@ -997,13 +997,13 @@ app.get('/api/confirm', async (req, res) => {
       const segment0 = idxSegment !== -1 ? (row[idxSegment] || '') : '';
       const redirectAlready =
         `https://www.safefreightprogram.com/subscribe-confirmed?` +
-        `email=${encodeURIComponent(email0)}&segments=${encodeURIComponent(segment0)}&already=1`;
+        `email=${encodeURIComponent(email0)}&segments=${encodeURIComponent(segment0)}&mode=already`;
       return res.redirect(redirectAlready);
     }
 
     // Only pending -> active
     if (currentStatus !== 'pending') {
-      return res.redirect('https://www.safefreightprogram.com/subscribe-confirmed?already=1');
+      return res.redirect('https://www.safefreightprogram.com/subscribe-confirmed?mode=already');
     }
 
     row[idxStatus] = 'active';
