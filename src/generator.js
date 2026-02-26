@@ -420,13 +420,16 @@ const newsletterResult = {
     const content = (article.title + ' ' + (article.summary || '')).toLowerCase();
 
     // Safety Alert - highest priority
+    // Note: 'road safety' and 'critical' deliberately excluded — too broad, match policy docs
+    // Safety Alert requires immediate incident or defect signals
     const safetyIndicators = [
       'accident', 'fatality', 'fatalities', 'death', 'deaths', 'injured', 'injuries',
       'crash', 'collision', 'rollover', 'jackknife',
-      'safety alert', 'safety warning', 'urgent', 'immediate danger', 'critical',
-      'emergency', 'recall', 'defect notice', 'defect', 'hazard', 'dangerous',
-      'safety resource', 'driving safety', 'road safety', 'ntarc',
-      'near miss', 'serious injury', 'heavy vehicle safety'
+      'safety alert', 'safety warning', 'urgent recall', 'immediate danger',
+      'emergency', 'recall', 'defect notice', 'defect order',
+      'hazard alert', 'dangerous goods incident', 'dangerous load',
+      'safety resource', 'driving safety', 'ntarc',
+      'near miss', 'serious injury', 'heavy vehicle crash', 'fatal crash'
     ];
 
     // Enforcement Action - second highest
