@@ -50,15 +50,18 @@ module.exports = {
     },
     {
       // NHVR Safety Alerts and Bulletins — load restraint, defect notices, recalls
+      // Selector targets page-content links only, excludes PDF downloads and nav
       name: 'NHVR Safety Alerts',
       url: 'https://www.nhvr.gov.au/safety-accreditation-compliance/safety-alerts-and-bulletins',
       priority: 10,
-      selector: '.field-items a[href], .field-item a[href], a[href*="safety-alert"], a[href*="bulletin"]',
+      selector: '.field-items a[href*="/news/"], .field-item a[href*="/news/"], a[href*="/news/202"]',
       titleSelector: null,
       linkSelector: null,
       summarySelector: null,
       category: 'safety',
-      enabled: true
+      enabled: true,
+      // Exclude old PDF bulletins — only want recent web-based safety notices
+      excludeTitlePatterns: [/^SB\d{4}/, /^SCA-\d{4}/, /vehicle standards bulletin/i, /COVID-19/i]
     },
 
     // ─────────────────────────────────────────────────────────────
@@ -68,6 +71,7 @@ module.exports = {
     {
       // ATA has an RSS feed — most reliable scrape method
       // Falls back to HTML if RSS unavailable
+      // requireKeywords: only save articles matching at least one compliance term
       name: 'ATA Media Releases',
       url: 'https://www.truck.net.au/rss.xml',
       priority: 9,
@@ -77,7 +81,14 @@ module.exports = {
       summarySelector: 'description',
       category: 'regulatory',
       enabled: true,
-      isRss: true                         // flag for RSS parsing path
+      isRss: true,                        // flag for RSS parsing path
+      requireKeywords: [                  // only save if title/summary contains one of these
+        'compliance', 'enforcement', 'nhvr', 'hvnl', 'cor ', 'chain of responsibility',
+        'fatigue', 'load restraint', 'mass', 'pbs', 'accreditation', 'safety',
+        'regulation', 'standard', 'penalty', 'fine', 'licence', 'audit',
+        'trucksafe', 'master code', 'submission', 'consultation', 'responds to',
+        'welcomes', 'calls for', 'urges', 'warns', 'review'
+      ]
     },
     {
       // ATA frontpage HTML fallback if RSS fails
