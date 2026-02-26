@@ -265,8 +265,10 @@ app.post('/api/newsletter/send/:newsletterId', async (req, res) => {
     }
     const { newsletter, segment, articles } = cachedData;
     if (testEmail) {
-      const testSubscriber = { email: testEmail, name: 'Test User', segment };
-      await emailSender.sendSingleEmail(newsletter, testSubscriber);
+      const testSubscribers = await emailSender.getSubscribersFromSheet(segment);
+const matched = testSubscribers.find(s => s.email.toLowerCase() === testEmail.toLowerCase());
+const testSubscriber = matched || { email: testEmail, name: 'Test User', segment, unsubToken: 'test-token' };
+await emailSender.sendSingleEmail(newsletter, testSubscriber);
       return res.json({ success: true, message: 'Test email sent successfully', data: { newsletterId, testEmail, segment } });
     }
     if (confirmSend) {
