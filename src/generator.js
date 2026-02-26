@@ -95,6 +95,7 @@ class NewsletterGenerator {
         /market share/i, /production milestone/i, /record half.year/i,
         /stock market/i, /merger/i, /acquisition/i, /ipo/i,
         /conference registrations/i, /registrations open/i, /awards/i, /australia day honour/i,
+        /geotab connect/i, /megatrans/i, /\bconference\b.*\bfocus/i,
         /traffic alert/i, /road works/i, /night works/i, /bridge closure/i, /changed traffic/i,
         /traffic conditions/i, /cyclone.*reconstruction/i, /hwy.*closure/i,
         /new model launch/i, /product launch/i, /enters.+market/i
@@ -763,7 +764,10 @@ CRITICAL RULES:
 FOR EACH ARTICLE, your action tip MUST:
 - Name at least one SPECIFIC thing from the article itself: a named standard, a specific figure, a particular obligation, a named provision, a specific vehicle type, a specific route or corridor, a specific enforcement target. Generic instructions like "conduct a review" or "ensure compliance" are NOT acceptable unless paired with a specific focus drawn from the article.
 - If the article mentions a specific fine amount, name it. If it names a specific vehicle standard, name it. If it names a specific NHVR operation or blitz target, name it. If it names a specific document or instrument, name it.
-- For enforcement stories: only name the specific offence if the article states it. If the article does not name the offence, do NOT speculate (e.g. do not assume it was a fatigue offence). Instead, name the most common intercept triggers for that jurisdiction or enforcement type based on what the article does say.
+- For enforcement stories: only name the specific offence if the article explicitly states it. NEVER speculate about the offence type. If the article does not name the offence, build the tip around what the article DOES state — the penalty amount, the jurisdiction, the enforcement mechanism — and reference the most common intercept triggers without asserting which one applied.
+- EXAMPLE — article says "Truck driver fined $1,747 and loses licence for three months after SA intercept" but does not name the specific offence:
+  CORRECT: "Check that all driver licence details are current and that vehicle defect histories are clear before dispatch — SA intercepts typically target licence status, load restraint, and vehicle condition. A $1,747 fine and three-month disqualification is the exposure for a single intercept."
+  WRONG: "Review fatigue management records and ensure work and rest hours are documented." (fatigue is not mentioned in the article — do not assume it)
 - Do NOT add deadlines unless the article explicitly states one.
 - Direct actions to compliance functions, not named roles.
 
