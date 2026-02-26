@@ -348,13 +348,10 @@ app.post('/api/newsletters/send', async (req, res) => {
     if (testEmail) {
       // Send test email only
       const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
-      const testSubscriber = { 
-        email: testEmail, 
-        name: 'Test User',
-        segment: segment
-      };
-      
-      await emailSender.sendSingleEmail(newsletter, testSubscriber);
+      const testSubscribers = await emailSender.getSubscribersFromSheet(segment);
+const matched = testSubscribers.find(s => s.email.toLowerCase() === testEmail.toLowerCase());
+const testSubscriber = matched || { email: testEmail, name: 'Test User', segment, unsubToken: 'test-token' };
+await emailSender.sendSingleEmail(newsletter, testSubscriber);
       
       return res.json({
         success: true,
