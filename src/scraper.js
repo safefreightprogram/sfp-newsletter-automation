@@ -95,6 +95,11 @@ class EnhancedNewsScraper {
   }
 
   async scrapeSource(source) {
+    // Route RSS sources to dedicated parser
+    if (source.isRss) {
+      return this.scrapeRssSource(source);
+    }
+
     const articles = [];
     
     try {
@@ -181,6 +186,58 @@ class EnhancedNewsScraper {
       } else {
         throw new Error(`Network error: ${error.message}`);
       }
+    }
+  }
+
+
+  async scrapeRssSource(source) {
+    const articles = [];
+    try {
+      console.log(`   📡 Fetching RSS: ${source.url}...`);
+      const response = await axios.get(source.url, {
+        headers: { 'User-Agent': config.scraping.userAgent, 'Accept': 'application/rss+xml, application/xml, text/xml, */*' },
+        timeout: config.scraping.timeout
+      });
+
+      const $ = cheerio.load(response.data, { xmlMode: true });
+      const items = $('item');
+      console.log(`   ✅ RSS response — ${items.length} items found`);
+
+      items.each((i, el) => {
+        if (articles.length >= config.scraping.maxArticlesPerSource) return false;
+        const $el = $(el);
+
+        const title = $el.find('title').first().text().trim()
+          .replace('<![CDATA[', '').replace(']]>', '');
+        const link = $el.find('link').first().text().trim() ||
+          $el.find('link').first().attr('href');
+        const summary = $el.find('description').first().text().trim()
+          .replace(/<[^>]+>/g, '')  // strip HTML tags from description
+          .replace('<![CDATA[', '').replace(']]>', '')
+          .substring(0, 500);
+
+        if (!title || !link) return;
+
+        const relevanceScore = this.calculateRelevanceScore(title, summary, source);
+        articles.push({
+          source: source.name,
+          title: this.cleanText(title),
+          url: link,
+          summary: this.cleanText(summary),
+          category: source.category || 'industry',
+          priority: source.priority,
+          relevanceScore,
+          publishedDate: new Date(),
+          scrapedAt: new Date()
+        });
+      });
+
+      console.log(`   ✅ RSS parsed: ${articles.length} articles from ${source.name}`);
+      return articles;
+
+    } catch (error) {
+      console.error(`   ❌ RSS error for ${source.name}: ${error.message}`);
+      return [];
     }
   }
 
