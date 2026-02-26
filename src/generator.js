@@ -790,10 +790,9 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 </table>`;
 }).join('');
 
-  // One-click unsubscribe (GAS)
-  const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbzpItDNhfjRDMgCpYSZv_NZoqBmMDAZIzXCRIWl5UhJWYH55LbQaqOgBFiHqnQq9tIOIw/exec';
-const unsubscribeUrl = gasWebAppUrl + '?e=unsub&i={{ISSUE_ID}}&s=' + segment + '&t={{TOKEN}}';
-const pauseUrl = gasWebAppUrl + '?e=pause&i={{ISSUE_ID}}&s=' + segment + '&t={{TOKEN}}';
+// Placeholders substituted per-subscriber by sendSingleEmail()
+const unsubscribeUrl = '{{UNSUBSCRIBE_URL}}';
+const pauseUrl = '{{PAUSE_URL}}';
 
 
   // Mailto fallbacks
