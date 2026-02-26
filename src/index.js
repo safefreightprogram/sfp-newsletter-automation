@@ -1299,7 +1299,10 @@ app.post('/api/newsletter/test', async (req, res) => {
     const emailSender = new EmailSender();
 
     const newsletter = await newsletterGenerator.generateNewsletter(segment, false);
-    await emailSender.sendSingleEmail(newsletter, { email, name: 'Test User', segment });
+    const testSubscribers = await emailSender.getSubscribersFromSheet(segment);
+    const matchedSub = testSubscribers.find(s => s.email.toLowerCase() === email.toLowerCase());
+    const testSubscriber = matchedSub || { email, name: 'Test User', segment, unsubToken: 'test-token' };
+    await emailSender.sendSingleEmail(newsletter, testSubscriber);
     return res.json({ success:true, message:'Test email sent', data:{ segment, email, subject: newsletter.subject }});
   } catch (e) {
     return res.status(500).json({ success:false, error:e.message });
