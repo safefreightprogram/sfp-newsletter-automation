@@ -6,7 +6,7 @@ class EmailSender {
     this.resendApiKey = process.env.RESEND_API_KEY;
     this.resendApiUrl = 'https://api.resend.com/emails';
     
-    // Subscribers Sheet URLs
+    // Subscribers Sheet URLs 
     this.SUBSCRIBERS_SHEET_URLS = [
       'https://docs.google.com/spreadsheets/d/1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM/gviz/tq?tqx=out:json',
       'https://docs.google.com/spreadsheets/d/1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM/gviz/tq?tqx=out:csv',
