@@ -218,6 +218,16 @@ class EnhancedNewsScraper {
 
         if (!title || !link) return;
 
+        // Apply requireKeywords filter if configured
+        if (source.requireKeywords && source.requireKeywords.length > 0) {
+          const text = (title + ' ' + summary).toLowerCase();
+          const hasKeyword = source.requireKeywords.some(k => text.includes(k.toLowerCase()));
+          if (!hasKeyword) {
+            console.log(`   ⏭️ Skipped (no compliance keywords): ${title.substring(0, 50)}`);
+            return; // skip this item
+          }
+        }
+
         const relevanceScore = this.calculateRelevanceScore(title, summary, source);
         articles.push({
           source: source.name,
@@ -343,6 +353,14 @@ class EnhancedNewsScraper {
   }
 
   validateArticleData(article, source) {
+    // Check excludeTitlePatterns if configured on source
+    if (source.excludeTitlePatterns && article.title) {
+      const excluded = source.excludeTitlePatterns.some(p => p.test(article.title));
+      if (excluded) {
+        console.log(`   ⏭️ Excluded by title pattern: ${article.title.substring(0, 50)}`);
+        return false;
+      }
+    }
     const filters = config.contentFilters;
     
     // Basic required fields
