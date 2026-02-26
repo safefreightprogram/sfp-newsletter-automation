@@ -89,16 +89,16 @@ class EmailSender {
     }
     
     const issueId = `${newsletterData.segment}-${new Date().toISOString().split('T')[0]}`;
-const unsubscribeToken = subscriber.unsubToken || subscriber.unsub_token || subscriber.Unsub_Token;
+    const unsubscribeToken = subscriber.unsubToken || subscriber.unsub_token || subscriber.Unsub_Token;
     
     const apiBaseUrl =
-  (process.env.PUBLIC_API_BASE_URL || '').trim() ||
-  'https://sfp-newsletter-automation-production.up.railway.app';
+      (process.env.PUBLIC_API_BASE_URL || '').trim() ||
+      'https://sfp-newsletter-automation-production.up.railway.app';
 
-const unsubscribeUrl = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+    const unsubscribeUrl = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
 
-// (pause can come later — for now, don’t pretend it exists)
-const pauseUrl = '';
+    // (pause can come later — for now, don't pretend it exists)
+    const pauseUrl = '';
 
     
     // Personalize HTML
@@ -192,19 +192,20 @@ async getSubscribersFromSheet(segment) {
       });
       
       // Get column indices based on your actual headers
-      const emailCol = columnMap['Email'];
-      const nameCol = columnMap['Name'];
-      const segmentCol = columnMap['Segment'];
-      const statusCol = columnMap['Status'];
-            const unsubCol = columnMap['Unsubscribed_At'];
-      const pausedCol = columnMap['Paused_At'];
-      const resumeCol = columnMap['Resume_At'];
-      const companyCol = columnMap['Company'];
-      const confirmedCol = columnMap['Confirmed_At'];
+      const emailCol      = columnMap['Email'];
+      const nameCol       = columnMap['Name'];
+      const segmentCol    = columnMap['Segment'];
+      const statusCol     = columnMap['Status'];
+      const unsubCol      = columnMap['Unsubscribed_At'];
+      const pausedCol     = columnMap['Paused_At'];
+      const resumeCol     = columnMap['Resume_At'];
+      const companyCol    = columnMap['Company'];
+      const confirmedCol  = columnMap['Confirmed_At'];
+      const unsubTokenCol = columnMap['Unsub_Token']; // FIX: required for unsubscribe links
 
       // Optional columns may not exist in the sheet; guard indexes
       const safeCell = (row, colIndex) =>
-        (typeof colIndex === 'number' && colIndex >= 0) ? row[colIndex] : '';
+        (typeof colIndex === 'number' && colIndex >= 0) ? (row[colIndex] || '') : '';
 
       
       if (emailCol === undefined || segmentCol === undefined || statusCol === undefined) {
@@ -218,15 +219,16 @@ async getSubscribersFromSheet(segment) {
         const row = rows[i];
         if (row.length < 4) continue;
         
-        const email = row[emailCol];
-        const name = row[nameCol];
+        const email          = row[emailCol];
+        const name           = row[nameCol];
         const subscriberSegment = row[segmentCol];
-        const status = row[statusCol];
-                const unsubscribedAt = safeCell(row, unsubCol);
-        const pausedAt = safeCell(row, pausedCol);
-        const resumeAt = safeCell(row, resumeCol);
-        const company = safeCell(row, companyCol);
-        const confirmedAt = safeCell(row, confirmedCol);
+        const status         = row[statusCol];
+        const unsubscribedAt = safeCell(row, unsubCol);
+        const pausedAt       = safeCell(row, pausedCol);
+        const resumeAt       = safeCell(row, resumeCol);
+        const company        = safeCell(row, companyCol);
+        const confirmedAt    = safeCell(row, confirmedCol);
+        const unsubToken     = safeCell(row, unsubTokenCol); // FIX: fetch token
 
         
         // Validate email
@@ -246,26 +248,27 @@ async getSubscribersFromSheet(segment) {
         }
         
         // Check segment match (supports CSV e.g. "pro,driver")
-const segRaw = (subscriberSegment || '').toString().trim().toLowerCase();
+        const segRaw = (subscriberSegment || '').toString().trim().toLowerCase();
 
-const segList = segRaw
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+        const segList = segRaw
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
 
-const segmentMatch =
-  segList.includes(segment.toLowerCase()) ||
-  segList.includes('all') ||
-  (segment.toLowerCase() === 'pro' && segList.includes('professional'));
+        const segmentMatch =
+          segList.includes(segment.toLowerCase()) ||
+          segList.includes('all') ||
+          (segment.toLowerCase() === 'pro' && segList.includes('professional'));
 
-if (segmentMatch) {
-  subscribers.push({
-            email: email.trim(),
-            name: (name || '').trim(),
-            segment: subscriberSegment.trim(),
-            status: status.trim(),
-            company: (company || '').trim(),
-            subscribedDate: confirmedAt || new Date().toISOString()
+        if (segmentMatch) {
+          subscribers.push({
+            email:          email.trim(),
+            name:           (name || '').trim(),
+            segment:        subscriberSegment.trim(),
+            status:         status.trim(),
+            company:        (company || '').trim(),
+            subscribedDate: confirmedAt || new Date().toISOString(),
+            unsubToken:     unsubToken.trim(), // FIX: include token in subscriber object
           });
         }
       }
@@ -353,7 +356,7 @@ if (segmentMatch) {
           email.includes('@') && 
           subscriberSegment && 
           subscriberSegment &&
-subscriberSegment.toString().toLowerCase().split(',').map(s => s.trim()).includes(segment.toLowerCase()) &&
+          subscriberSegment.toString().toLowerCase().split(',').map(s => s.trim()).includes(segment.toLowerCase()) &&
           status && 
           status.toLowerCase() === 'active') {
         
