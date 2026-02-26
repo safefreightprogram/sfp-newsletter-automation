@@ -78,7 +78,7 @@ class NewsletterGenerator {
       await this.sheetsManager.initialize();
       
       // Get and prioritize recent articles (7-day filter applied in getRecentArticles)
-      const recentArticles = await this.getRecentArticles(7, segment);
+      const recentArticles = await this.getRecentArticles(14, segment);
       console.log(`📋 Found ${recentArticles.length} recent articles for ${segment} segment`);
       
       if (recentArticles.length < 3) {
