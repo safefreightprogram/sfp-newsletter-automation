@@ -95,6 +95,8 @@ class NewsletterGenerator {
         /market share/i, /production milestone/i, /record half.year/i,
         /stock market/i, /merger/i, /acquisition/i, /ipo/i,
         /conference registrations/i, /registrations open/i, /awards/i, /australia day honour/i,
+        /traffic alert/i, /road works/i, /night works/i, /bridge closure/i, /changed traffic/i,
+        /traffic conditions/i, /cyclone.*reconstruction/i, /hwy.*closure/i,
         /new model launch/i, /product launch/i, /enters.+market/i
       ];
 
@@ -107,8 +109,22 @@ class NewsletterGenerator {
         return !isAdvocacy;
       });
 
-      const poolForSelection = complianceFiltered.length >= 5 ? complianceFiltered : recentArticles;
-      if (complianceFiltered.length < 5) {
+      // Also exclude QTA traffic alert articles by source+title pattern
+      const trafficSources = ['queensland transport authority', 'qta'];
+      const trafficTitlePatterns = [/^(mwfwb|sc|fnq|fnnq|seq|nq|ck|b|bne)\s*:/i, /hwy[,\s]/i, /highway.*alert/i, /road.*alert/i];
+      const sourceFiltered = complianceFiltered.filter(article => {
+        const src = (article.source || '').toLowerCase();
+        const isTrafficSource = trafficSources.some(s => src.includes(s));
+        const isTrafficTitle = trafficTitlePatterns.some(p => p.test(article.title || ''));
+        if (isTrafficSource && isTrafficTitle) {
+          console.log(`🚫 Pre-filter excluded (traffic alert): ${article.title.substring(0, 60)}...`);
+          return false;
+        }
+        return true;
+      });
+
+      const poolForSelection = sourceFiltered.length >= 5 ? sourceFiltered : recentArticles;
+      if (sourceFiltered.length < 5) {
         console.log(`⚠️ Pre-filter left fewer than 5 articles — using full pool as fallback`);
       }
 
@@ -747,6 +763,7 @@ CRITICAL RULES:
 FOR EACH ARTICLE, your action tip MUST:
 - Name at least one SPECIFIC thing from the article itself: a named standard, a specific figure, a particular obligation, a named provision, a specific vehicle type, a specific route or corridor, a specific enforcement target. Generic instructions like "conduct a review" or "ensure compliance" are NOT acceptable unless paired with a specific focus drawn from the article.
 - If the article mentions a specific fine amount, name it. If it names a specific vehicle standard, name it. If it names a specific NHVR operation or blitz target, name it. If it names a specific document or instrument, name it.
+- For enforcement stories: only name the specific offence if the article states it. If the article does not name the offence, do NOT speculate (e.g. do not assume it was a fatigue offence). Instead, name the most common intercept triggers for that jurisdiction or enforcement type based on what the article does say.
 - Do NOT add deadlines unless the article explicitly states one.
 - Direct actions to compliance functions, not named roles.
 
