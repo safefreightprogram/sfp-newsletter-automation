@@ -113,7 +113,7 @@ module.exports = {
       linkSelector: null,
       summarySelector: 'p',
       category: 'regulatory',
-      enabled: true
+      enabled: false   // Disabled: HTTP 404 on every scrape
     },
     {
       // HVIA — Heavy Vehicle Industry Australia
