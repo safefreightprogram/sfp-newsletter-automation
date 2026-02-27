@@ -101,9 +101,24 @@ class NewsletterGenerator {
         /university.*study/i, /study.*university/i, /research.*finds/i, /new.*research/i,
         /public health/i, /air quality/i, /noise pollution/i, /\bstudy\b.*health/i,
         /new model launch/i, /product launch/i, /enters.+market/i,
+        // Nav page titles accidentally scraped
+        /^safety, accreditation/i, /^safety alerts and bulletins$/i,
+        /^vehicle standards bulletin/i, /^SB\d{4}/i, /^SCA-\d{4}/i,
+        /^on-road compliance/i,
         /take a breather/i, /what it means for/i, /market.*dip/i,
         /registrations down/i, /registrations up/i, /market.*softening/i,
         /market.*decline/i, /market.*growth/i, /\bsales\b.*\bmarket\b/i
+      ];
+
+      // Additional exclusions for industry slot only — content unsuitable for "lighter" fifth slot
+      const industrySlotExclude = [
+        /killed/i, /fatal/i, /fatality/i, /fatalities/i, /death/i, /deaths/i,
+        /died/i, /crash.*life/i, /life.*crash/i, /tragic/i, /tragedy/i,
+        /single.vehicle crash/i, /multi.vehicle crash/i,
+        // Nav/page titles accidentally scraped as articles
+        /^safety, accreditation/i, /^safety alerts and bulletins$/i,
+        /^vehicle standards bulletin/i, /^SB\d{4}/i, /^SCA-\d{4}/i,
+        /^law & policies/i, /^on-road compliance/i
       ];
 
       const complianceFiltered = recentArticles.filter(article => {
@@ -151,10 +166,11 @@ class NewsletterGenerator {
       const remainingPool = recentArticles.filter(a => !usedUrls.has(a.url));
 
       // Industry slot uses the same advocacy/market exclusion list as compliance slots
-      // This prevents truck sales, conference, awards stories from appearing here too
+      // Plus additional exclusions for content unsuitable for the lighter fifth slot
       const industryPool = remainingPool.filter(a => {
         const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
-        return !advocacyPatterns.some(p => p.test(text));
+        return !advocacyPatterns.some(p => p.test(text)) &&
+               !industrySlotExclude.some(p => p.test(a.title));
       });
 
       // Prefer articles that match human interest patterns; fall back to best remaining
