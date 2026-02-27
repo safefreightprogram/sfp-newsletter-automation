@@ -176,9 +176,9 @@ module.exports = {
       // SafeWork NSW — prosecutions, safety alerts, enforceable undertakings
       // Covers WHS Act prosecutions involving transport operators in NSW
       name: 'SafeWork NSW',
-      url: 'https://www.safework.nsw.gov.au/news-and-media/media-releases',
+      url: 'https://www.safework.nsw.gov.au/news',
       priority: 8,
-      selector: 'article, .news-item, h2 a, h3 a, .media-release',
+      selector: 'article, .news-item, h2 a, h3 a, .media-release, .sfnsw-news-item',
       titleSelector: 'h2, h3, .title',
       linkSelector: 'a',
       summarySelector: 'p, .summary',
@@ -222,9 +222,16 @@ module.exports = {
       category: 'enforcement',
       enabled: true,
       requireKeywords: [
-        'road transport', 'truck', 'driver', 'heavy vehicle',
-        'chain of responsibility', 'fatigue', 'safety', 'prosecution',
-        'injury', 'fatality', 'supply chain', 'owner driver'
+        'heavy vehicle', 'truck driver', 'road transport',
+        'chain of responsibility', 'owner driver', 'fatigue',
+        'truck fatality', 'truck death', 'road freight',
+        'transport operator', 'trucking'
+      ],
+      excludeKeywords: [
+        'aviation', 'airline', 'qantas', 'virgin', 'airport',
+        'cabin crew', 'pilot', 'gig worker', 'uber', 'doordash',
+        'food delivery', 'rideshare', 'swissport', 'dnata',
+        'four corners', 'bain capital', 'theo', 'bargaining'
       ]
     },
     {
