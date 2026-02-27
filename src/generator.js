@@ -100,7 +100,10 @@ class NewsletterGenerator {
         /traffic conditions/i, /cyclone.*reconstruction/i, /hwy.*closure/i,
         /university.*study/i, /study.*university/i, /research.*finds/i, /new.*research/i,
         /public health/i, /air quality/i, /noise pollution/i, /\bstudy\b.*health/i,
-        /new model launch/i, /product launch/i, /enters.+market/i
+        /new model launch/i, /product launch/i, /enters.+market/i,
+        /take a breather/i, /what it means for/i, /market.*dip/i,
+        /registrations down/i, /registrations up/i, /market.*softening/i,
+        /market.*decline/i, /market.*growth/i, /\bsales\b.*\bmarket\b/i
       ];
 
       const complianceFiltered = recentArticles.filter(article => {
@@ -147,16 +150,12 @@ class NewsletterGenerator {
       const usedUrls = new Set(complianceArticles.map(a => a.url));
       const remainingPool = recentArticles.filter(a => !usedUrls.has(a.url));
 
-      // Exclude vendor conferences, awards, traffic alerts from industry slot
-      const industryExcludePatterns = [
-        /geotab/i, /connect conference/i, /megatrans/i, /brisbane truck show/i,
-        /nominations open/i, /award winner/i, /award finalist/i,
-        /sustainability award/i, /young tech award/i, /training.*award/i,
-        /SC:/i, /FNNQ:/i, /MWFWB:/i, /traffic alert/i
-      ];
-      const industryPool = remainingPool.filter(a =>
-        !industryExcludePatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
-      );
+      // Industry slot uses the same advocacy/market exclusion list as compliance slots
+      // This prevents truck sales, conference, awards stories from appearing here too
+      const industryPool = remainingPool.filter(a => {
+        const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
+        return !advocacyPatterns.some(p => p.test(text));
+      });
 
       // Prefer articles that match human interest patterns; fall back to best remaining
       let industryStory = industryPool.find(a =>
@@ -974,12 +973,9 @@ const formattedDate = date.toLocaleDateString('en-AU', {
     const iso = article.publishedAt || article.pubDate || '';
     if (!iso) return 'Published recently';
     const dt = new Date(iso);
-    const long = dt.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-    const now = new Date();
-    const diff = now - dt;
-    const s = Math.round(diff/1000), m = Math.round(s/60), h = Math.round(m/60), d = Math.round(h/24);
-    const rel = s < 60 ? `${s}s ago` : (m < 60 ? `${m}m ago` : (h < 24 ? `${h}h ago` : `${d}d ago`));
-    return `${long} (${rel})`;
+    if (isNaN(dt.getTime())) return 'Published recently';
+    // Format: "Wednesday 26 February 2026"
+    return dt.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
   })()}
 </div>
 
