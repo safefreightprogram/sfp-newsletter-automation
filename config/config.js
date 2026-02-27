@@ -228,10 +228,20 @@ module.exports = {
         'transport operator', 'trucking'
       ],
       excludeKeywords: [
+        // Aviation — TWU covers airlines heavily, none relevant to road freight
         'aviation', 'airline', 'qantas', 'virgin', 'airport',
-        'cabin crew', 'pilot', 'gig worker', 'uber', 'doordash',
-        'food delivery', 'rideshare', 'swissport', 'dnata',
-        'four corners', 'bain capital', 'theo', 'bargaining'
+        'cabin crew', 'pilot', 'flight', 'aircraft',
+        'swissport', 'dnata', 'jetstar',
+        // Gig / platform economy
+        'gig worker', 'uber', 'doordash', 'food delivery', 'rideshare',
+        'platform worker', 'on-demand',
+        // Industrial campaigns with no road compliance relevance
+        'bain capital', 'four corners', 'bargaining',
+        'senate inquiry', 'transport reform', 'reform campaign',
+        'i stand with', 'stand with theo', 'theo',
+        'safety crisis at', 'amazon',
+        // Rail
+        'rail worker', 'train driver', 'locomotive'
       ]
     },
     {
