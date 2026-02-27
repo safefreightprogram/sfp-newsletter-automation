@@ -1,4 +1,4 @@
-const OpenAI = require('openai');
+const OpenAI = require('openai'); 
 const SheetsManager = require('../config/sheets');
 const config = require('../config/config');
 const fs = require('fs');
