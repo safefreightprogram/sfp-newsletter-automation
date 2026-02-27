@@ -147,10 +147,21 @@ class NewsletterGenerator {
       const usedUrls = new Set(complianceArticles.map(a => a.url));
       const remainingPool = recentArticles.filter(a => !usedUrls.has(a.url));
 
+      // Exclude vendor conferences, awards, traffic alerts from industry slot
+      const industryExcludePatterns = [
+        /geotab/i, /connect conference/i, /megatrans/i, /brisbane truck show/i,
+        /nominations open/i, /award winner/i, /award finalist/i,
+        /sustainability award/i, /young tech award/i, /training.*award/i,
+        /SC:/i, /FNNQ:/i, /MWFWB:/i, /traffic alert/i
+      ];
+      const industryPool = remainingPool.filter(a =>
+        !industryExcludePatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
+      );
+
       // Prefer articles that match human interest patterns; fall back to best remaining
-      let industryStory = remainingPool.find(a =>
+      let industryStory = industryPool.find(a =>
         humanInterestPatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
-      ) || remainingPool[0];
+      ) || industryPool[0] || remainingPool[0];
 
       if (industryStory) {
         industryStory = { ...industryStory, category: 'From the Industry' };
