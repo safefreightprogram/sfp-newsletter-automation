@@ -228,6 +228,11 @@ class EnhancedNewsScraper {
           }
         }
 
+        // Extract publish date from RSS <pubDate>
+        const pubDateRaw = $el.find('pubDate').first().text().trim();
+        const pubDate = pubDateRaw ? new Date(pubDateRaw) : new Date();
+        const publishedAt = (!isNaN(pubDate.getTime())) ? pubDate.toISOString() : null;
+
         const relevanceScore = this.calculateRelevanceScore(title, summary, source);
         articles.push({
           source: source.name,
@@ -237,7 +242,8 @@ class EnhancedNewsScraper {
           category: source.category || 'industry',
           priority: source.priority,
           relevanceScore,
-          publishedDate: new Date(),
+          publishedDate: pubDate,
+          publishedAt,              // ISO string for template rendering
           scrapedAt: new Date()
         });
       });
@@ -282,6 +288,16 @@ class EnhancedNewsScraper {
     // Calculate relevance score
     const relevanceScore = this.calculateRelevanceScore(title, summary, source);
 
+    // Try to extract publish date from <time> element, meta tags, or structured data
+    const pubDateStr = this.extractWithFallback($el, $, ['time[datetime]', 'time'], 'datetime')
+      || this.extractWithFallback($el, $, ['.date', '.published', '.post-date', '.entry-date', 'time'], 'text')
+      || '';
+    let publishedAt = null;
+    if (pubDateStr) {
+      const parsed = new Date(pubDateStr);
+      if (!isNaN(parsed.getTime())) publishedAt = parsed.toISOString();
+    }
+
     return {
       source: source.name,
       title: this.cleanText(title),
@@ -290,7 +306,8 @@ class EnhancedNewsScraper {
       category: source.category || 'industry',
       priority: source.priority,
       relevanceScore: relevanceScore,
-      publishedDate: new Date(), // Could be enhanced to extract actual publish date
+      publishedDate: publishedAt ? new Date(publishedAt) : new Date(),
+      publishedAt: publishedAt,    // ISO string for template rendering; null if unknown
       scrapedAt: new Date()
     };
   }
