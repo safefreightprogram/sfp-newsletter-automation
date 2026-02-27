@@ -96,6 +96,7 @@ class NewsletterGenerator {
         /stock market/i, /merger/i, /acquisition/i, /ipo/i,
         /conference registrations/i, /registrations open/i, /awards/i, /australia day honour/i,
         /geotab connect/i, /megatrans/i, /\bconference\b.*\bfocus/i,
+        /\bstate conference/i, /\bconference 20\d\d/i, /in focus at.*conference/i, /projects in focus/i,
         /traffic alert/i, /road works/i, /night works/i, /bridge closure/i, /changed traffic/i,
         /traffic conditions/i, /cyclone.*reconstruction/i, /hwy.*closure/i,
         /university.*study/i, /study.*university/i, /research.*finds/i, /new.*research/i,
@@ -119,6 +120,9 @@ class NewsletterGenerator {
         /killed/i, /fatal/i, /fatality/i, /fatalities/i, /death/i, /deaths/i,
         /died/i, /crash.*life/i, /life.*crash/i, /tragic/i, /tragedy/i,
         /single.vehicle crash/i, /multi.vehicle crash/i,
+        // Product/materials stories — not human interest
+        /\\bliners\\b/i, /\\bpolymer/i, /\\bplastic.*application/i, /tipper.*application/i,
+        /performance plastic/i, /industrial.*material/i,
         // Nav/page titles accidentally scraped as articles
         /^safety, accreditation/i, /^safety alerts and bulletins$/i,
         /^vehicle standards bulletin/i, /^SB\d{4}/i, /^SCA-\d{4}/i,
@@ -355,7 +359,26 @@ const newsletterResult = {
       
       // Get articles from sheets
       const recentArticles = await this.sheetsManager.getRecentArticles(days, segment);
-      console.log(`📊 Raw articles from database: ${recentArticles.length}`);
+      // Drop known junk titles that slip through scraper filters
+      // (nav page titles, stale entries persisting in the database)
+      const junkTitlePatterns = [
+        /^safety,?\s+accreditation/i,
+        /^safety alerts and bulletins$/i,
+        /^vehicle standards bulletin/i,
+        /^SB\d{4}/i,
+        /^SCA-\d{4}/i,
+        /^on-road compliance$/i,
+        /^GXO$/i,
+        /^safety$/i,
+      ];
+      const cleanArticles = recentArticles.filter(a =>
+        !junkTitlePatterns.some(p => p.test(a.title.trim()))
+      );
+      if (cleanArticles.length < recentArticles.length) {
+        console.log(`🗑️  Dropped ${recentArticles.length - cleanArticles.length} junk titles from pool`);
+      }
+
+      console.log(`📊 Raw articles from database: ${cleanArticles.length}`);
       
       // STRICT: Only articles from last 7 days
       const sevenDaysAgo = new Date();
@@ -365,7 +388,7 @@ const newsletterResult = {
       // but excludes articles from months/years ago (old NHVR bulletins, harvest blitzes)
       const twentyOneDaysAgo = new Date();
       twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
-      const contemporaryArticles = recentArticles.filter(a => {
+      const contemporaryArticles = cleanArticles.filter(a => {
         if (!a.publishedAt) return true; // keep if no date (don't over-filter)
         return new Date(a.publishedAt) >= twentyOneDaysAgo;
       });
@@ -452,8 +475,12 @@ const newsletterResult = {
         geoBonus = -15;
       }
 
-      // Composite score: category (60%) + relevance (25%) + geo (15% via bonus)
-      const compositeScore = (categoryScore * 0.6) + (relevanceScore * 0.25) + geoBonus;
+      // Source priority bonus — differentiates articles within same category
+      // NHVR/NTC (priority 10) = +10, ATA/VTA (priority 8-9) = +6-8, trade press (priority 5-7) = +2-5
+      const sourcePriorityBonus = (article.priority || 5) * 1.0;
+
+      // Composite score: category (60%) + relevance (25%) + geo + source priority tiebreaker
+      const compositeScore = (categoryScore * 0.6) + (relevanceScore * 0.25) + geoBonus + sourcePriorityBonus;
 
       return { ...article, compositeScore, categoryPriority: categoryScore, geoBonus };
     });
@@ -1061,10 +1088,11 @@ const formattedDate = date.toLocaleDateString('en-AU', {
   ${this.escapeHtml(article.summary)}
 </p>
 
+    ${article.category !== 'From the Industry' ? `
     <div style="background: #f8fafc; padding: 16px; border-radius: 6px; margin: 12px 0; border-left: 4px solid ${color}; border-radius: 0 6px 6px 0;">
       <p style="margin: 0 0 8px 0; color: #374151; font-size: 14px;"><strong>Action Tip:</strong></p>
       <p style="margin: 0; color: #4b5563; font-size: 14px; line-height: 1.5;">${this.escapeHtml(article.tip)}</p>
-    </div>
+    </div>` : ''}
     <p style="margin: 8px 0 12px 0; color: #6b7280; font-size: 13px; font-style: italic;">Source: ${this.escapeHtml(article.source)}</p>
     <table role="presentation" cellspacing="0" cellpadding="0" border="0">
       <tr><td style="background-color: ${color}; border-radius: 4px;">
@@ -1291,7 +1319,7 @@ OUTPUT FORMAT: Return ONLY a valid JSON array containing ONE object. No markdown
 {
   "title": "Engaging headline that a transport professional would want to click",
   "summary": "2-3 sentences in a natural, readable tone. No forced compliance angle. Just tell the story — what happened, why it's interesting, what it means for the industry. This can be about a new vehicle, an industry milestone, an innovation, a person, or anything genuinely interesting to people who work in transport.",
-  "tip": "A single 'Worth knowing' observation — one sentence that gives the reader something to think about or take away. It does NOT need to be an action. It can be an observation, a fact, or a question worth considering. Do NOT force a compliance angle. Do NOT use hedging language.",
+  "tip": "",  // Not displayed — From the Industry slot has no action tip
   "url": "EXACT original URL — never modify",
   "source": "Original source name",
   "category": "From the Industry"
