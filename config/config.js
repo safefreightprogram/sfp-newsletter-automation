@@ -157,14 +157,14 @@ module.exports = {
       ]
     },
     {
-      // Federal Court of Australia — judgments RSS, fallback to JADE
-      // Kept as secondary source in case JADE alert misses anything
+      // Federal Court of Australia — DISABLED: full RSS firehose (~150 judgments/run, 0 relevant)
+      // JADE alert is topic-filtered and covers heavy vehicle court decisions correctly
       name: 'Federal Court Judgments',
       url: 'https://www.judgments.fedcourt.gov.au/rss/fca-judgments',
       type: 'rss',
       priority: 9,
       category: 'enforcement',
-      enabled: true,
+      enabled: false,
       requireKeywords: [
         'heavy vehicle', 'chain of responsibility', 'hvnl',
         'transport operator', 'truck', 'fatigue', 'road transport',
@@ -229,7 +229,7 @@ module.exports = {
     },
     {
       // NHVR Consultations — new codes, guides, regulatory updates open for feedback
-      // Separate from NHVR Latest News; captures guidance publications at release
+      // Captures guidance publications at release; filtered to broadly applicable items
       name: 'NHVR Consultations',
       url: 'https://www.nhvr.gov.au/consultation',
       priority: 10,
@@ -238,10 +238,18 @@ module.exports = {
       linkSelector: 'a',
       summarySelector: 'p, .summary, .description',
       category: 'regulatory_guidance',
-      enabled: true
+      enabled: true,
+      // Exclude beta tools, calculators, and single-industry niche codes
+      excludeKeywords: [
+        'calculator', 'beta release', 'beta version',
+        'wine industry', 'mobile crane', 'waste and recycling',
+        'livestock', 'grain', 'sugar cane', 'cotton',
+        'intelligent transport system'   // ITS framework — too technical/niche
+      ]
     },
     {
-      // NHVR Publications — codes of practice, technical guides, reference documents
+      // NHVR Publications — DISABLED: scrapes raw PDF/DOCX filenames and admin forms
+      // Publication announcements come through NHVR Latest News instead
       name: 'NHVR Publications',
       url: 'https://www.nhvr.gov.au/about-us/publications',
       priority: 9,
@@ -250,12 +258,7 @@ module.exports = {
       linkSelector: 'a',
       summarySelector: 'p, .description',
       category: 'regulatory_guidance',
-      enabled: true,
-      requireKeywords: [
-        'guide', 'code', 'framework', 'standard', 'policy', 'manual',
-        'fatigue', 'load restraint', 'mass', 'dimension', 'accreditation',
-        'CoR', 'chain of responsibility', 'HVNL', 'safety management'
-      ]
+      enabled: false
     },
     {
       // NTC — National Transport Commission: law reform, consultations
