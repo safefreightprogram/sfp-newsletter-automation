@@ -1,4 +1,4 @@
-const OpenAI = require('openai'); 
+const OpenAI = require('openai');
 const SheetsManager = require('../config/sheets');
 const config = require('../config/config');
 const fs = require('fs');
@@ -307,10 +307,15 @@ const newsletterResult = {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      const contemporaryArticles = recentArticles;
-      console.log(`📅 Using all ${contemporaryArticles.length} articles (date filtering temporarily disabled)`);
-      
-      console.log(`📅 After 7-day contemporaneity filter: ${contemporaryArticles.length} recent articles`);
+      // Date filter: 21 days — wide enough to include last 2-3 scrape cycles
+      // but excludes articles from months/years ago (old NHVR bulletins, harvest blitzes)
+      const twentyOneDaysAgo = new Date();
+      twentyOneDaysAgo.setDate(twentyOneDaysAgo.getDate() - 21);
+      const contemporaryArticles = recentArticles.filter(a => {
+        if (!a.publishedAt) return true; // keep if no date (don't over-filter)
+        return new Date(a.publishedAt) >= twentyOneDaysAgo;
+      });
+      console.log(`📅 After 21-day filter: ${contemporaryArticles.length} articles (removed ${recentArticles.length - contemporaryArticles.length} older)`);
       
       if (contemporaryArticles.length < 3) {
         throw new Error(`Insufficient current content: only ${contemporaryArticles.length} articles from last 7 days`);
@@ -411,7 +416,7 @@ const newsletterResult = {
 
   // Enforce category diversity: once a category has 2 articles selected, a 3rd only gets in
   // if its composite score is 20+ points above the next best article from a different category.
-  enforceCategoryDiversity(sortedArticles, maxPerCategory = 2, dominanceThreshold = 20) {
+  enforceCategoryDiversity(sortedArticles, maxPerCategory = 3, dominanceThreshold = 10) {
     const selected = [];
     const categoryCounts = {};
     const remaining = [...sortedArticles];
