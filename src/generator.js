@@ -130,6 +130,8 @@ class NewsletterGenerator {
       ];
 
       let selectedArticles = [];
+      let complianceArticles = [];
+      let industryStory = null;
 
       // ── PRO SEGMENT: CoR Intel Weekly ────────────────────────────────────────
       if (segment === 'pro') {
@@ -157,7 +159,7 @@ class NewsletterGenerator {
         const poolForSelection = sourceFiltered.length >= 4 ? sourceFiltered : recentArticles;
         if (sourceFiltered.length < 4) console.log(`⚠️ Pre-filter left fewer than 4 articles — using full pool as fallback`);
 
-        const complianceArticles = poolForSelection.slice(0, 4);
+        complianceArticles = poolForSelection.slice(0, 4);
 
         const humanInterestPatterns = [
           /truckie/i, /driver.*story/i, /long.service/i, /community/i,
@@ -175,7 +177,7 @@ class NewsletterGenerator {
                  !industrySlotExclude.some(p => p.test(a.title));
         });
 
-        let industryStory = industryPool.find(a =>
+        industryStory = industryPool.find(a =>
           humanInterestPatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
         ) || industryPool[0] || remainingPool[0];
 
@@ -1030,6 +1032,19 @@ ACTION TIP REQUIREMENTS — CRITICAL:
 - BAD: "You might consider reviewing your compliance processes when convenient." (hedging)
 - Reference specific instruments where relevant: HVNL, SMS, BFM, AFM, Mass Management Accreditation, Load Restraint Guide, PBS, CoR duty categories.
 - Stop short of predicting prosecution, fines, or legal outcomes — the disclaimer covers the analysis; the tip covers the action.
+
+ACTION TIP OPENERS — vary these naturally based on who the tip is most relevant to. Do not always start with "The compliance function". Choose the most fitting opener for the article:
+- "Schedulers should..." (fatigue, run times, work/rest)
+- "Fleet managers need to..." (vehicle standards, defects, maintenance)
+- "Your safety team should..." (safety alerts, incidents)
+- "Operations managers need to..." (permits, route planning, OSOM)
+- "Your business should..." (general compliance obligations)
+- "Compliance managers should..." (audits, documentation, policy)
+- "Anyone managing consignments needs to..." (load restraint, mass, consignor obligations)
+- "If you oversee drivers..." (fatigue, licences, medicals)
+- "Before your next dispatch..." (pre-trip, permit checks)
+- "Review your..." (procedures, documentation, records)
+Never start two consecutive tips with the same opener.
 
 COURT JUDGMENT HANDLING:
 - Some articles will be raw court judgment titles, e.g. "Smith Transport Pty Ltd v NHVR [2026] FCA 123"
