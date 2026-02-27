@@ -105,6 +105,10 @@ class NewsletterGenerator {
         /^safety, accreditation/i, /^safety alerts and bulletins$/i,
         /^vehicle standards bulletin/i, /^SB\d{4}/i, /^SCA-\d{4}/i,
         /^on-road compliance/i,
+        // Peak body welcome statements — not actionable compliance content
+        /welcomes.*funding/i, /welcomes.*upgrade/i, /welcomes.*announcement/i,
+        /welcomes.*investment/i, /welcomes.*budget/i, /welcomes.*decision/i,
+        /\\broads upgrade/i, /road upgrade funding/i,
         /take a breather/i, /what it means for/i, /market.*dip/i,
         /registrations down/i, /registrations up/i, /market.*softening/i,
         /market.*decline/i, /market.*growth/i, /\bsales\b.*\bmarket\b/i
@@ -195,6 +199,56 @@ class NewsletterGenerator {
         console.log(`${i + 1}. [${article.category || 'Uncategorized'}] ${article.title.substring(0, 60)}...`);
         console.log(`   📊 Score: ${article.compositeScore?.toFixed(1) || article.relevanceScore || 'N/A'} | Source: ${article.source}`);
       });
+
+      // Fetch publish dates for the 5 selected articles
+      // Only fetches article pages for final selected articles — not the whole pool
+      console.log('📅 Fetching publish dates for selected articles...');
+      await Promise.all(selectedArticles.map(async (article) => {
+        // Skip if we already have a real date (e.g. from RSS pubDate)
+        if (article.publishedAt) {
+          const d = new Date(article.publishedAt);
+          // If it's today (scrape time fallback), treat as missing
+          const isToday = d.toDateString() === new Date().toDateString();
+          if (!isToday) {
+            console.log(`  ✅ Date already known: ${article.title.substring(0, 40)}...`);
+            return;
+          }
+        }
+        try {
+          const axios = require('axios');
+          const cheerio = require('cheerio');
+          const res = await axios.get(article.url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SFP-Newsletter/1.0)' },
+            timeout: 8000,
+            maxRedirects: 3,
+            validateStatus: s => s < 400
+          });
+          const $ = cheerio.load(res.data);
+          // Try in order of reliability
+          const dateStr =
+            $('meta[property="article:published_time"]').attr('content') ||
+            $('meta[name="article:published_time"]').attr('content') ||
+            $('meta[property="og:published_time"]').attr('content') ||
+            $('time[datetime]').first().attr('datetime') ||
+            $('time[class*="publish"]').first().attr('datetime') ||
+            $('[class*="publish-date"]').first().attr('datetime') ||
+            $('[class*="post-date"]').first().text().trim() ||
+            $('[class*="entry-date"]').first().text().trim() ||
+            $('[class*="published"]').first().text().trim() ||
+            '';
+          if (dateStr) {
+            const parsed = new Date(dateStr);
+            if (!isNaN(parsed.getTime())) {
+              article.publishedAt = parsed.toISOString();
+              console.log(`  ✅ Date fetched: ${parsed.toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' })} — ${article.title.substring(0, 40)}...`);
+              return;
+            }
+          }
+          console.log(`  ⚠️ No date found: ${article.title.substring(0, 40)}...`);
+        } catch (err) {
+          console.log(`  ❌ Date fetch failed: ${article.title.substring(0, 40)}... (${err.message})`);
+        }
+      }));
 
       // Process compliance articles and industry story separately
       const complianceProcessed = await this.processWithOpenAI(complianceArticles, segment);
@@ -472,8 +526,8 @@ const newsletterResult = {
       'crackdown', 'blitz', 'nhvr operation', 'compliance operation',
       'roadside operation', 'compliance check', 'roadside check',
       'non compliance', 'non-compliance', 'licence suspended', 'licence disqualified',
-      'licence cancelled', 'infringement', 'notice of', 'nhvr targets',
-      'nhvr blitz', 'nhvr operation', 'targets compliance', 'targeting'
+      'licence cancelled', 'infringement', 'nhvr targets compliance',
+      'nhvr blitz', 'targets compliance'
     ];
 
     // Regulatory Update - third priority
@@ -992,9 +1046,11 @@ const formattedDate = date.toLocaleDateString('en-AU', {
 <div style="margin: 0 0 8px 0; color: #6b7280; font-size: 13px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
   ${(() => {
     const iso = article.publishedAt || article.pubDate || '';
-    if (!iso) return 'Published recently';
+    if (!iso) return '';
     const dt = new Date(iso);
-    if (isNaN(dt.getTime())) return 'Published recently';
+    if (isNaN(dt.getTime())) return '';
+    // Don't show scrape-time fallback dates (i.e. today's date with no real source date)
+    if (dt.toDateString() === new Date().toDateString()) return '';
     // Format: "Wednesday 26 February 2026"
     return dt.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
   })()}
