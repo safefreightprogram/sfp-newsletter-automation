@@ -228,6 +228,36 @@ module.exports = {
       ]
     },
     {
+      // NHVR Consultations — new codes, guides, regulatory updates open for feedback
+      // Separate from NHVR Latest News; captures guidance publications at release
+      name: 'NHVR Consultations',
+      url: 'https://www.nhvr.gov.au/consultation',
+      priority: 10,
+      selector: 'a[href*="/consultation/"]',
+      titleSelector: 'h2, h3, .title',
+      linkSelector: 'a',
+      summarySelector: 'p, .summary, .description',
+      category: 'regulatory_guidance',
+      enabled: true
+    },
+    {
+      // NHVR Publications — codes of practice, technical guides, reference documents
+      name: 'NHVR Publications',
+      url: 'https://www.nhvr.gov.au/about-us/publications',
+      priority: 9,
+      selector: 'a[href*="/files/"], a[href*="/publication"], .publication-item, h3 a, h2 a',
+      titleSelector: 'h2, h3, .title',
+      linkSelector: 'a',
+      summarySelector: 'p, .description',
+      category: 'regulatory_guidance',
+      enabled: true,
+      requireKeywords: [
+        'guide', 'code', 'framework', 'standard', 'policy', 'manual',
+        'fatigue', 'load restraint', 'mass', 'dimension', 'accreditation',
+        'CoR', 'chain of responsibility', 'HVNL', 'safety management'
+      ]
+    },
+    {
       // NTC — National Transport Commission: law reform, consultations
       // Disabled: consistently timing out (>30s). Re-enable when resolved.
       name: 'NTC News',
