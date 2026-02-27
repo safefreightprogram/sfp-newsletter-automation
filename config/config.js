@@ -176,9 +176,12 @@ module.exports = {
       // SafeWork NSW — prosecutions, safety alerts, enforceable undertakings
       // Covers WHS Act prosecutions involving transport operators in NSW
       name: 'SafeWork NSW',
-      url: 'https://www.safework.nsw.gov.au/__data/assets/xml_file/0004/373975/safework-newsroom.xml',
-      type: 'rss',
+      url: 'https://www.safework.nsw.gov.au/news-and-media/media-releases',
       priority: 8,
+      selector: 'article, .news-item, h2 a, h3 a, .media-release',
+      titleSelector: 'h2, h3, .title',
+      linkSelector: 'a',
+      summarySelector: 'p, .summary',
       category: 'enforcement',
       enabled: true,
       requireKeywords: [
@@ -207,20 +210,21 @@ module.exports = {
       segmentTag: 'driver'    // Always tag as driver content
     },
     {
-      // TWU — Transport Workers Union, member health and wellbeing news
-      name: 'TWU News',
-      url: 'https://www.twu.com.au/news/',
-      priority: 7,
+      // TWU — Transport Workers Union press releases on safety, road reform, supply chain
+      // Note: mainly advocacy/industrial — useful for road transport reform stories
+      name: 'TWU Media',
+      url: 'https://www.twu.com.au/latest-news/',
+      priority: 6,
       selector: 'article, .post, h2 a, h3 a',
       titleSelector: 'h2, h3, .entry-title',
       linkSelector: 'a',
       summarySelector: '.excerpt, p',
-      category: 'wellness',
+      category: 'enforcement',
       enabled: true,
-      segmentTag: 'driver',
       requireKeywords: [
-        'health', 'wellbeing', 'mental', 'fatigue', 'stress', 'support',
-        'safety', 'driver', 'worker', 'injury', 'wellness', 'fit', 'sleep'
+        'road transport', 'truck', 'driver', 'heavy vehicle',
+        'chain of responsibility', 'fatigue', 'safety', 'prosecution',
+        'injury', 'fatality', 'supply chain', 'owner driver'
       ]
     },
     {
