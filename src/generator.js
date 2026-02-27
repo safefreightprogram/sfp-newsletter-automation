@@ -173,6 +173,11 @@ class NewsletterGenerator {
         const remainingPool = recentArticles.filter(a => !usedUrls.has(a.url));
         const industryPool = remainingPool.filter(a => {
           const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
+          // Exclude NHVR Consultations and regulatory guidance from industry slot —
+          // these are compliance stories and should stay in the compliance pool
+          const isGuidanceSource = ['NHVR Consultations', 'NHVR Publications', 'NTC'].includes(a.source);
+          const isGuidanceCategory = (a.category || '') === 'Regulatory Guidance';
+          if (isGuidanceSource || isGuidanceCategory) return false;
           return !advocacyPatterns.some(p => p.test(text)) &&
                  !industrySlotExclude.some(p => p.test(a.title));
         });
@@ -646,7 +651,7 @@ const newsletterResult = {
         // Hard penalty regardless of incidental Australian mentions
         geoBonus = -20;
       } else if (australianScore > 0) {
-        geoBonus = Math.min(australianScore * 8, 24);
+        geoBonus = Math.min(australianScore * 4, 16);  // Capped lower — geo is tiebreaker not primary signal
       } else if (foreignScore > 0) {
         geoBonus = -15;
       }
@@ -655,8 +660,9 @@ const newsletterResult = {
       // NHVR/NTC (priority 10) = +10, ATA/VTA (priority 8-9) = +6-8, trade press (priority 5-7) = +2-5
       const sourcePriorityBonus = (article.priority || 5) * 1.0;
 
-      // Composite score: category (60%) + relevance (25%) + geo + source priority tiebreaker
-      const compositeScore = (categoryScore * 0.6) + (relevanceScore * 0.25) + geoBonus + sourcePriorityBonus;
+      // Composite score: category (55%) + relevance (35%) + geo + source priority tiebreaker
+      // Geo capped at 16 (was 24) — prevents geographic signal drowning out content quality
+      const compositeScore = (categoryScore * 0.55) + (relevanceScore * 0.35) + geoBonus + sourcePriorityBonus;
 
       return { ...article, compositeScore, categoryPriority: categoryScore, geoBonus };
     });
@@ -1029,7 +1035,7 @@ OUTPUT FORMAT: Return ONLY valid JSON array. No markdown formatting, no code blo
 For each article, provide:
 {
   "title": "Professional title stating the compliance impact directly — no hedging",
-  "summary": "2-3 sentences: What happened, which HVNL obligations or CoR duty categories are engaged, and what the immediate exposure is for duty holders. Be direct and specific.",
+  "summary": "2-3 sentences. Lead with the specific facts — what was announced, decided, or changed, and the concrete details (amounts, parties, locations, dates). Then state the direct compliance implication. NEVER use these phrases: 'engages CoR obligations', 'immediate exposure', 'duty holders must', 'this review engages', 'impacting duty holders'. Write what actually happened in plain language.",
   "tip": "One directive, specific action. Name the task, the person responsible, and a timeframe. Reference actual compliance instruments where relevant. Do NOT predict legal outcomes. Do NOT use hedging language.",
   "url": "EXACT original URL - NEVER modify, create, or change this",
   "source": "Original source name",
