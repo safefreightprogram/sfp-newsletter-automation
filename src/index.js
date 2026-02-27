@@ -1295,22 +1295,23 @@ app.post('/api/newsletter/test', async (req, res) => {
     const EmailSender = require('./emailSender');
     const emailSender = new EmailSender();
 
-    // Find most recent cached newsletter for this segment
+    // Find most recently cached newsletter for this segment
+    // Iterate in reverse insertion order so the latest preview is used
     let newsletter = null;
     let newsletterId = null;
-    for (const [id, cached] of newsletterCache.entries()) {
+    const cacheEntries = [...newsletterCache.entries()].reverse();
+    for (const [id, cached] of cacheEntries) {
       if (cached.segment === segment) {
         newsletter = cached.newsletter;
         newsletterId = id;
+        console.log(`📋 Send Test: matched cache entry ${id} for segment "${segment}"`);
         break;
       }
     }
-
-    if (newsletter) {
-      console.log(`📋 Send Test: using cached preview ${newsletterId} for ${segment}`);
-    } else {
+    if (!newsletter) {
+      console.log(`📋 Send Test: no cached entry found for segment "${segment}". Available: ${[...newsletterCache.entries()].map(([id,c]) => `${id}(${c.segment})`).join(', ')}`);
       // No cache — generate fresh but do NOT mark articles as used
-      console.log(`📋 Send Test: no cached preview found, generating fresh (articles will NOT be marked used)`);
+      console.log(`📋 Send Test: generating fresh for ${segment} (articles will NOT be marked used)`);
       const NewsletterGenerator = require('./generator');
       const newsletterGenerator = new NewsletterGenerator();
       newsletter = await newsletterGenerator.generateNewsletter(segment, false);
