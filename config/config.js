@@ -129,6 +129,66 @@ module.exports = {
       enabled: true
     },
     // ─────────────────────────────────────────────────────────────
+    // TIER 2a: Legal sources — court decisions, prosecutions, WHS
+    // ─────────────────────────────────────────────────────────────
+
+    {
+      // JADE (Judgments and Decisions Enhanced) — curated RSS alert for CoR/HVNL cases
+      // Covers Federal Court, all state Supreme Courts, Fair Work Commission, AAT
+      // Registered account: djenkins@level22.com.au — public URL, no auth required
+      name: 'JADE Court Decisions',
+      url: 'https://jade.io/link.do?alert,224268,-64850387',
+      type: 'rss',
+      priority: 10,   // Highest — court decisions are primary CoR intelligence
+      category: 'enforcement',
+      enabled: true,
+      // requireKeywords filters out legislation updates, FWC unfair dismissal,
+      // workers comp, and other noise — keeps prosecution/enforcement outcomes
+      requireKeywords: [
+        'sentence', 'sentenced', 'sentencing',
+        'plea of guilty', 'convicted', 'conviction',
+        'penalty', 'fine', 'infringement',
+        'prosecution', 'prosecuted',
+        'appeal', 'category 2', 'category 3',
+        'nhvr', 'national heavy vehicle regulator',
+        'improvement notice', 'prohibition notice',
+        'scheduler', 'consignor', 'consignee', 'loading manager',
+        'duty', 'breach', 'offence', 'offenses'
+      ]
+    },
+    {
+      // Federal Court of Australia — judgments RSS, fallback to JADE
+      // Kept as secondary source in case JADE alert misses anything
+      name: 'Federal Court Judgments',
+      url: 'https://www.judgments.fedcourt.gov.au/rss/fca-judgments',
+      type: 'rss',
+      priority: 9,
+      category: 'enforcement',
+      enabled: true,
+      requireKeywords: [
+        'heavy vehicle', 'chain of responsibility', 'hvnl',
+        'transport operator', 'truck', 'fatigue', 'road transport',
+        'national heavy vehicle', 'nhvr', 'overloading',
+        'consignor', 'consignee', 'scheduler', 'loading manager'
+      ]
+    },
+    {
+      // SafeWork NSW — prosecutions, safety alerts, enforceable undertakings
+      // Covers WHS Act prosecutions involving transport operators in NSW
+      name: 'SafeWork NSW',
+      url: 'https://www.safework.nsw.gov.au/__data/assets/xml_file/0004/373975/safework-newsroom.xml',
+      type: 'rss',
+      priority: 8,
+      category: 'enforcement',
+      enabled: true,
+      requireKeywords: [
+        'transport', 'truck', 'driver', 'vehicle', 'freight',
+        'prosecution', 'penalty', 'fatigue', 'load', 'chain of responsibility',
+        'operator', 'worker', 'fatality', 'serious injury'
+      ]
+    },
+
+    // ─────────────────────────────────────────────────────────────
     // TIER 2b: Driver wellbeing — mental fitness, health, support
     // These feed the Safe Freight Mate slot 4 wellbeing story
     // ─────────────────────────────────────────────────────────────
@@ -366,7 +426,11 @@ module.exports = {
     'westernroads.com.au',
     // Wellbeing sources
     'healthyheads.org.au',
-    'twu.com.au'
+    'twu.com.au',
+    // Legal sources
+    'jade.io',
+    'judgments.fedcourt.gov.au',
+    'safework.nsw.gov.au'
   ],
 
   // Rate limiting configuration
