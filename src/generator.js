@@ -589,19 +589,21 @@ const newsletterResult = {
     // Category priority differs by segment
     // Pro: CoR/legal weight. Driver: on-road impact weight.
     const categoryPriority = segment === 'driver' ? {
-      'Safety Alert': 100,       // Defects, recalls, road hazards — direct driver risk
-      'Enforcement Action': 100, // Blitzes, intercepts, fines — directly affects drivers
-      'Driver Wellness': 90,     // Fatigue, health — driver-specific
-      'Regulatory Update': 70,   // Rule changes that affect drivers
-      'Industry News': 65,       // General industry — can bump weak regulatory
-      'Technical Update': 50     // Vehicle tech — lower driver relevance
+      'Safety Alert': 100,           // Defects, recalls, road hazards — direct driver risk
+      'Enforcement Action': 100,     // Blitzes, intercepts, fines — directly affects drivers
+      'Driver Wellness': 90,         // Fatigue, health — driver-specific
+      'Regulatory Update': 70,       // Rule changes that affect drivers
+      'Regulatory Guidance': 65,     // New codes/guides — less urgent for drivers
+      'Industry News': 65,           // General industry — can bump weak regulatory
+      'Technical Update': 50         // Vehicle tech — lower driver relevance
     } : {
       'Safety Alert': 100,
       'Enforcement Action': 90,
+      'Regulatory Guidance': 85,     // New codes, guides, consultations — primary pro material
       'Regulatory Update': 80,
       'Technical Update': 70,
       'Industry News': 60,
-      'Driver Wellness': 40      // Pro newsletter: wellness is Safe Freight Mate territory
+      'Driver Wellness': 40          // Pro newsletter: wellness is Safe Freight Mate territory
     };
 
     // Geographic relevance markers
@@ -764,10 +766,22 @@ const newsletterResult = {
       'work hours', 'rest break', 'sleep', 'impairment', 'drug', 'alcohol'
     ];
 
+    // Regulatory Guidance — new/updated codes, guides, consultation documents
+    const guidanceIndicators = [
+      'code of practice', 'load restraint guide', 'master code', 'consultation',
+      'draft guide', 'new guide', 'updated guide', 'new framework', 'new standard',
+      'guidance material', 'industry guide', 'opens for consultation',
+      'public consultation', 'feedback', 'submissions', 'discussion paper',
+      'regulatory impact', 'new publication', 'published today', 'now available',
+      'accreditation standard', 'fatigue management guide', 'nhvr publications',
+      'work diary guide', 'log haulage', 'hvnl reform', 'hvnl implementation'
+    ];
+
     // Score each category
     const scores = {
       'Safety Alert': safetyIndicators.reduce((s, t) => content.includes(t) ? s + 1 : s, 0),
       'Enforcement Action': enforcementIndicators.reduce((s, t) => content.includes(t) ? s + 1 : s, 0),
+      'Regulatory Guidance': guidanceIndicators.reduce((s, t) => content.includes(t) ? s + 1 : s, 0),
       'Regulatory Update': regulatoryIndicators.reduce((s, t) => content.includes(t) ? s + 1 : s, 0),
       'Technical Update': technicalIndicators.reduce((s, t) => content.includes(t) ? s + 1 : s, 0),
       'Driver Wellness': wellnessIndicators.reduce((s, t) => content.includes(t) ? s + 1 : s, 0)
@@ -780,6 +794,11 @@ const newsletterResult = {
     const regulatorySources = ['ata ', 'australian trucking association', 'vta', 'qta', 'hvia', 'artsa'];
     if (complianceSources.some(s => source.includes(s))) {
       scores['Regulatory Update'] += 3;
+    }
+    // Boost Regulatory Guidance for dedicated guidance sources
+    const guidanceSources = ['nhvr consultations', 'nhvr publications'];
+    if (guidanceSources.some(s => source.includes(s))) {
+      scores['Regulatory Guidance'] += 5;
     }
     if (regulatorySources.some(s => source.includes(s))) {
       scores['Regulatory Update'] += 2;
@@ -1014,7 +1033,7 @@ For each article, provide:
   "tip": "One directive, specific action. Name the task, the person responsible, and a timeframe. Reference actual compliance instruments where relevant. Do NOT predict legal outcomes. Do NOT use hedging language.",
   "url": "EXACT original URL - NEVER modify, create, or change this",
   "source": "Original source name",
-  "category": "Choose from: Safety Alert, Enforcement Action, Regulatory Update, Technical Update, Driver Wellness, Industry News"
+  "category": "Choose from: Safety Alert, Enforcement Action, Regulatory Guidance, Regulatory Update, Technical Update, Driver Wellness, Industry News"
 }
 
 Note: the final article in each batch may already have category set to "From the Industry" — preserve that category as-is.
@@ -1046,6 +1065,13 @@ ACTION TIP OPENERS — vary these naturally based on who the tip is most relevan
 - "Review your..." (procedures, documentation, records)
 Never start two consecutive tips with the same opener.
 
+REGULATORY GUIDANCE HANDLING:
+- Articles about new codes of practice, updated guides, consultation releases, or new frameworks
+- Lead with what has been released and what it covers — be specific (e.g. "The NHVR has released a revised Load Restraint Guide...")
+- State whether it's in consultation (feedback open) or finalised and in effect
+- The action tip should say what compliance managers should do: review the document, update their SMS, submit feedback by the deadline, etc.
+- Consultation deadlines are time-critical — always mention them in the action tip if present
+
 COURT JUDGMENT HANDLING:
 - Some articles will be raw court judgment titles, e.g. "Smith Transport Pty Ltd v NHVR [2026] FCA 123"
 - Extract the compliance significance: what legal issue was decided and what it means for CoR duty holders
@@ -1055,10 +1081,11 @@ COURT JUDGMENT HANDLING:
 PRIORITY ORDER (most important first):
 1. Safety Alert - immediate safety concerns with operational impact
 2. Enforcement Action - prosecutions, penalties, court decisions — name the penalties and duty categories involved
-3. Regulatory Update - new rules, policy changes — state when they take effect
-4. Technical Update - vehicle standards, equipment requirements
-5. Driver Wellness - fatigue, health, wellbeing
-6. Industry News - market developments, operational context`
+3. Regulatory Guidance - new or updated codes of practice, guides, consultation releases — state what it covers and what compliance managers should do with it
+4. Regulatory Update - new rules, policy changes — state when they take effect
+5. Technical Update - vehicle standards, equipment requirements
+6. Driver Wellness - fatigue, health, wellbeing
+7. Industry News - market developments, operational context`
 
       : `You are a senior road safety officer and former long-haul driver writing for Safe Freight Mate newsletter.
 
@@ -1077,7 +1104,7 @@ For each article, provide:
   "tip": "One direct, practical action. Tell the driver exactly what to do and when. No hedging, no waffle.",
   "url": "EXACT original URL - NEVER modify, create, or change this",
   "source": "Original source name",
-  "category": "Choose from: Safety Alert, Enforcement Action, Regulatory Update, Technical Update, Driver Wellness, Industry News"
+  "category": "Choose from: Safety Alert, Enforcement Action, Regulatory Guidance, Regulatory Update, Technical Update, Driver Wellness, Industry News"
 }
 
 Note: the final article in each batch may already have category set to "From the Industry" — preserve that category as-is.
@@ -1157,7 +1184,7 @@ Return only valid JSON array:\n\n${JSON.stringify(articles, null, 2)}`;
         }
         
         // Validate category
-        const validCategories = ['Safety Alert', 'Enforcement Action', 'Regulatory Update', 'Technical Update', 'Driver Wellness', 'Industry News', 'From the Industry'];
+        const validCategories = ['Safety Alert', 'Enforcement Action', 'Regulatory Guidance', 'Regulatory Update', 'Technical Update', 'Driver Wellness', 'Industry News', 'From the Industry'];
         if (!validCategories.includes(processed.category)) {
           processed.category = 'Industry News';
         }
