@@ -1031,6 +1031,12 @@ ACTION TIP REQUIREMENTS — CRITICAL:
 - Reference specific instruments where relevant: HVNL, SMS, BFM, AFM, Mass Management Accreditation, Load Restraint Guide, PBS, CoR duty categories.
 - Stop short of predicting prosecution, fines, or legal outcomes — the disclaimer covers the analysis; the tip covers the action.
 
+COURT JUDGMENT HANDLING:
+- Some articles will be raw court judgment titles, e.g. "Smith Transport Pty Ltd v NHVR [2026] FCA 123"
+- Extract the compliance significance: what legal issue was decided and what it means for CoR duty holders
+- The action tip should name what compliance managers should review in light of the decision
+- If the summary is sparse, focus on the legal principle and its practical application — do not fabricate specific facts not in the article
+
 PRIORITY ORDER (most important first):
 1. Safety Alert - immediate safety concerns with operational impact
 2. Enforcement Action - prosecutions, penalties, court decisions — name the penalties and duty categories involved
