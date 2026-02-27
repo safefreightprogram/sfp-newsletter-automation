@@ -96,7 +96,7 @@ class EnhancedNewsScraper {
 
   async scrapeSource(source) {
     // Route RSS sources to dedicated parser
-    if (source.isRss) {
+    if (source.isRss || source.type === 'rss') {
       return this.scrapeRssSource(source);
     }
 
