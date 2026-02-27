@@ -103,31 +103,34 @@ module.exports = {
       enabled: true
     },
     {
-      // VTA — Victorian Transport Association media releases
-      name: 'VTA Media Releases',
-      url: 'https://www.vta.com.au/media-releases',
+      // VTA — Victorian Transport Association
+      // media-releases page is JS-rendered; scrape news section instead
+      name: 'VTA News',
+      url: 'https://www.vta.com.au/news',
       priority: 8,
-      selector: 'article, .media-release, .news-item, h2 a, h3 a',
-      titleSelector: 'h2, h3, .title',
-      linkSelector: 'a',
-      summarySelector: '.excerpt, .summary, p',
+      selector: 'a[href*="/news/"], a[href*="/media-releases/"], a[href*="/post/"]',
+      titleSelector: null,
+      linkSelector: null,
+      summarySelector: 'p',
       category: 'regulatory',
       enabled: true
     },
     {
       // HVIA — Heavy Vehicle Industry Australia
+      // /news/ page only shows nav — try posts feed
       name: 'HVIA News',
       url: 'https://hvia.asn.au/news/',
       priority: 8,
-      selector: 'article, .news-item, .post, h2 a, h3 a',
-      titleSelector: 'h2, h3, .title',
-      linkSelector: 'a',
-      summarySelector: '.excerpt, .summary, p',
+      selector: 'a[href*="/news/"], a[href*="/post/"], a[href*="/article/"], .entry-title a, h2.title a',
+      titleSelector: null,
+      linkSelector: null,
+      summarySelector: '.entry-content p, .post-content p, p',
       category: 'regulatory',
       enabled: true
     },
     {
       // NTC — National Transport Commission: law reform, consultations
+      // Disabled: consistently timing out (>30s). Re-enable when resolved.
       name: 'NTC News',
       url: 'https://www.ntc.gov.au/news-and-media/news',
       priority: 9,
@@ -136,7 +139,7 @@ module.exports = {
       linkSelector: 'a',
       summarySelector: '.excerpt, .summary, p',
       category: 'regulatory',
-      enabled: true
+      enabled: false
     },
 
     // ─────────────────────────────────────────────────────────────
