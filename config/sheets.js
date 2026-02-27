@@ -109,7 +109,7 @@ async initialize() {
           Source: article.source,
           Title: article.title,
           URL: article.url,
-          Published_Date: (article.publishedDate ? new Date(article.publishedDate) : new Date()).toISOString(),
+          Published_Date: (article.publishedAt || (article.publishedDate ? new Date(article.publishedDate).toISOString() : new Date().toISOString())),
           Summary: article.summary,
           Used_In_Issue: '',
           Content_Hash: hash,
@@ -221,6 +221,7 @@ const segmentMatch = !seg || rowSegmentTag === 'both' || rowSegmentTag === seg |
             url: row.get('URL'),
             source: row.get('Source'),
             summary: row.get('Summary'),
+            publishedAt: row.get('Published_Date') || null,  // ISO string for date display
             relevanceScore: parseFloat(row.get('Relevance_Score')) || 0,
             segmentTag: rowSegmentTag
           });
