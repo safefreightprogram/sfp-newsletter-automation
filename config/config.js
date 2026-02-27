@@ -128,6 +128,41 @@ module.exports = {
       category: 'regulatory',
       enabled: true
     },
+    // ─────────────────────────────────────────────────────────────
+    // TIER 2b: Driver wellbeing — mental fitness, health, support
+    // These feed the Safe Freight Mate slot 4 wellbeing story
+    // ─────────────────────────────────────────────────────────────
+
+    {
+      // Healthy Heads in Trucks & Sheds — dedicated transport mental health org
+      name: 'Healthy Heads',
+      url: 'https://www.healthyheads.org.au/resources/',
+      priority: 9,
+      selector: 'article, .post, .resource-item, .card, h2 a, h3 a',
+      titleSelector: 'h2, h3, .entry-title, .card-title',
+      linkSelector: 'a',
+      summarySelector: '.excerpt, .summary, .card-text, p',
+      category: 'wellness',
+      enabled: true,
+      segmentTag: 'driver'    // Always tag as driver content
+    },
+    {
+      // TWU — Transport Workers Union, member health and wellbeing news
+      name: 'TWU News',
+      url: 'https://www.twu.com.au/news/',
+      priority: 7,
+      selector: 'article, .post, h2 a, h3 a',
+      titleSelector: 'h2, h3, .entry-title',
+      linkSelector: 'a',
+      summarySelector: '.excerpt, p',
+      category: 'wellness',
+      enabled: true,
+      segmentTag: 'driver',
+      requireKeywords: [
+        'health', 'wellbeing', 'mental', 'fatigue', 'stress', 'support',
+        'safety', 'driver', 'worker', 'injury', 'wellness', 'fit', 'sleep'
+      ]
+    },
     {
       // NTC — National Transport Commission: law reform, consultations
       // Disabled: consistently timing out (>30s). Re-enable when resolved.
@@ -259,6 +294,7 @@ module.exports = {
     'regulatory': 20,    // NHVR, NTC, peak bodies — primary source
     'enforcement': 15,   // Court decisions, prosecutions, blitzes
     'safety': 12,        // Safety alerts, incidents, recalls
+    'wellness': 10,      // Driver mental health, wellbeing — driver segment priority
     'technical': 8,      // Vehicle standards, maintenance
     'industry': 4        // General industry news — trade press filler
   },
@@ -327,7 +363,10 @@ module.exports = {
     'primemovermag.com.au',
     'trailermag.com.au',
     'truckandbus.net.au',
-    'westernroads.com.au'
+    'westernroads.com.au',
+    // Wellbeing sources
+    'healthyheads.org.au',
+    'twu.com.au'
   ],
 
   // Rate limiting configuration
