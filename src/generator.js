@@ -134,82 +134,91 @@ class NewsletterGenerator {
       let industryStory = null;
 
       // ── PRO SEGMENT: CoR Intel Weekly ────────────────────────────────────────
+      // Quality-first: publish 2-3 strong articles rather than 4 weak ones.
+      // Minimum composite score thresholds gate entry — no article gets in just
+      // because there's a slot to fill.
       if (segment === 'pro') {
 
-        const complianceFiltered = recentArticles.filter(article => {
-          const text = (article.title + ' ' + (article.summary || '')).toLowerCase();
-          const isAdvocacy = advocacyPatterns.some(p => p.test(text));
-          if (isAdvocacy) console.log(`🚫 Pre-filter excluded (advocacy/market): ${article.title.substring(0, 60)}...`);
-          return !isAdvocacy;
-        });
+        const PRO_COMPLIANCE_THRESHOLD = 72;  // Minimum score for compliance slots 1-3
+        const PRO_INDUSTRY_THRESHOLD   = 65;  // Minimum score for the optional industry slot
 
-        const trafficSources = ['queensland transport authority', 'qta'];
+        // Pre-filter: advocacy, traffic alerts, non-compliance content
         const trafficTitlePatterns = [/^(mwfwb|sc|fnq|fnnq|seq|nq|ck|b|bne)\s*:/i, /hwy[,\s]/i, /highway.*alert/i, /road.*alert/i];
-        const sourceFiltered = complianceFiltered.filter(article => {
-          const src = (article.source || '').toLowerCase();
-          const isTrafficSource = trafficSources.some(s => src.includes(s));
-          const isTrafficTitle = trafficTitlePatterns.some(p => p.test(article.title || ''));
-          if (isTrafficSource && isTrafficTitle) {
+        const compliancePool = recentArticles.filter(article => {
+          const text = (article.title + ' ' + (article.summary || '')).toLowerCase();
+          if (advocacyPatterns.some(p => p.test(text))) {
+            console.log(`🚫 Pre-filter excluded (advocacy/market): ${article.title.substring(0, 60)}...`);
+            return false;
+          }
+          if (trafficTitlePatterns.some(p => p.test(article.title || ''))) {
             console.log(`🚫 Pre-filter excluded (traffic alert): ${article.title.substring(0, 60)}...`);
             return false;
           }
           return true;
         });
 
-        const poolForSelection = sourceFiltered.length >= 4 ? sourceFiltered : recentArticles;
-        if (sourceFiltered.length < 4) console.log(`⚠️ Pre-filter left fewer than 4 articles — using full pool as fallback`);
+        // Select compliance articles that clear the quality threshold (max 3)
+        complianceArticles = compliancePool
+          .filter(a => (a.compositeScore || a.relevanceScore || 0) >= PRO_COMPLIANCE_THRESHOLD)
+          .slice(0, 3);
 
-        complianceArticles = poolForSelection.slice(0, 4);
+        const aboveThreshold = complianceArticles.length;
+        const belowThreshold = compliancePool.filter(a => (a.compositeScore || a.relevanceScore || 0) < PRO_COMPLIANCE_THRESHOLD).length;
+        console.log(`📊 Pro compliance: ${aboveThreshold} articles above threshold (${PRO_COMPLIANCE_THRESHOLD}), ${belowThreshold} below — not used`);
 
-        const humanInterestPatterns = [
-          /truckie/i, /driver.*story/i, /long.service/i, /community/i,
-          /milestone/i, /record.*run/i, /industry.*leader/i, /tribute/i,
-          /behind.*wheel/i, /on.*road/i, /innovation/i, /technology/i,
-          /electric/i, /hydrogen/i, /autonomous/i, /future.*freight/i,
-          /new.*truck/i, /new.*vehicle/i, /launch/i, /unveil/i
-        ];
+        if (complianceArticles.length === 0) {
+          // Nothing clears threshold — lower bar to top 2 from pool rather than sending empty
+          console.log(`⚠️ No articles cleared threshold — using top 2 from pool as fallback`);
+          complianceArticles = compliancePool.slice(0, 2);
+        }
 
+        // Optional industry slot — only runs if a genuinely good article exists
+        // NHVR Consultations and Regulatory Guidance stay in compliance pool, not here
         const usedUrls = new Set(complianceArticles.map(a => a.url));
-        const remainingPool = recentArticles.filter(a => !usedUrls.has(a.url));
-        const industryPool = remainingPool.filter(a => {
+        const industryPool = recentArticles.filter(a => {
+          if (usedUrls.has(a.url)) return false;
           const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
-          // Exclude NHVR Consultations and regulatory guidance from industry slot —
-          // these are compliance stories and should stay in the compliance pool
-          const isGuidanceSource = ['NHVR Consultations', 'NHVR Publications', 'NTC'].includes(a.source);
-          const isGuidanceCategory = (a.category || '') === 'Regulatory Guidance';
-          if (isGuidanceSource || isGuidanceCategory) return false;
-          return !advocacyPatterns.some(p => p.test(text)) &&
-                 !industrySlotExclude.some(p => p.test(a.title));
+          const isGuidance = ['NHVR Consultations', 'NHVR Publications', 'NTC'].includes(a.source)
+                          || (a.category || '') === 'Regulatory Guidance';
+          if (isGuidance) return false;
+          if (advocacyPatterns.some(p => p.test(text))) return false;
+          if (industrySlotExclude.some(p => p.test(a.title))) return false;
+          return (a.compositeScore || a.relevanceScore || 0) >= PRO_INDUSTRY_THRESHOLD;
         });
+
+        // Prefer human-interest stories; fall back to best qualifying article
+        const humanInterestPatterns = [
+          /truckie/i, /driver.*story/i, /milestone/i, /record/i,
+          /electric/i, /hydrogen/i, /autonomous/i, /new.*truck/i,
+          /new.*vehicle/i, /launch/i, /unveil/i, /innovation/i, /technology/i
+        ];
 
         industryStory = industryPool.find(a =>
           humanInterestPatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
-        ) || industryPool[0] || remainingPool[0];
+        ) || industryPool[0] || null;
 
         if (industryStory) {
           industryStory = { ...industryStory, category: 'From the Industry' };
           console.log(`📰 Industry slot: ${industryStory.title.substring(0, 60)}...`);
+        } else {
+          console.log(`📰 Industry slot: skipped — no article cleared threshold (${PRO_INDUSTRY_THRESHOLD})`);
         }
 
         selectedArticles = industryStory
           ? [...complianceArticles, industryStory]
           : complianceArticles;
 
-        console.log(`✂️ Selected ${complianceArticles.length} compliance + ${industryStory ? 1 : 0} industry articles`);
+        console.log(`✂️ Selected ${complianceArticles.length} compliance + ${industryStory ? 1 : 0} industry = ${selectedArticles.length} total`);
 
       // ── DRIVER SEGMENT: Safe Freight Mate ────────────────────────────────────
+      // Quality-first: 1-3 strong road intel articles + synthesised wellbeing
+      // + optional servo talk story only if something genuinely interesting exists.
       } else {
 
-        // Driver-specific advocacy filter — slightly looser than pro
-        // Legal/CoR analysis is less relevant; practical road content is kept
-        const driverAdvocacyPatterns = [
-          ...advocacyPatterns,
-          // Also exclude dry regulatory analysis that means nothing to a driver
-          /chain of responsibility.*framework/i, /cor.*obligations.*operator/i,
-          /duty holder.*analysis/i, /hvnl.*interpretation/i
-        ];
+        const DRIVER_ROAD_THRESHOLD  = 68;  // Minimum score for road intel slots 1-3
+        const DRIVER_SERVO_THRESHOLD = 63;  // Minimum score for optional servo talk slot
 
-        // Driver content boost — these article types score higher in the driver segment
+        // Driver content boost patterns — applied before threshold check
         const driverPriorityPatterns = [
           /intercept/i, /roadside.*check/i, /blitz/i, /operation.*target/i,
           /fatigue/i, /rest.*break/i, /work.*rest/i, /hours.*rule/i,
@@ -219,125 +228,117 @@ class NewsletterGenerator {
           /driver.*health/i, /driver.*wellness/i, /mental.*health/i
         ];
 
-        const driverFiltered = recentArticles.filter(article => {
-          const text = (article.title + ' ' + (article.summary || '')).toLowerCase();
-          const isAdvocacy = driverAdvocacyPatterns.some(p => p.test(text));
-          if (isAdvocacy) console.log(`🚫 Driver pre-filter excluded: ${article.title.substring(0, 60)}...`);
-          return !isAdvocacy;
-        });
-
-        // Re-score for driver relevance — boost articles that directly affect drivers
-        const driverScored = driverFiltered.map(article => {
-          const text = (article.title + ' ' + (article.summary || '')).toLowerCase();
-          const driverBoost = driverPriorityPatterns.reduce((boost, p) =>
-            p.test(text) ? boost + 15 : boost, 0
-          );
-          // Driver Wellness gets a big boost (was deprioritised for pro)
-          const wellnessBoost = article.category === 'Driver Wellness' ? 30 : 0;
-          return {
-            ...article,
-            compositeScore: (article.compositeScore || article.relevanceScore || 0) + driverBoost + wellnessBoost
-          };
-        });
-
-        // Re-sort after driver re-scoring
-        driverScored.sort((a, b) => b.compositeScore - a.compositeScore);
-
-        // Driver newsletter: allow a strong industry story to bump a weak compliance article
-        // Select top 4 from the full re-scored pool (not split by compliance vs industry)
-        const driverPool = driverScored.length >= 4 ? driverScored : recentArticles;
-        const driverTop4 = driverPool.slice(0, 4);
-
-        // Slot 5: the story drivers would talk about at a servo
-        // Gossipy, interesting, surprising — new trucks, records, colourful incidents, industry characters
-        const servoTalkPatterns = [
-          /new.*truck/i, /new.*cab/i, /unveil/i, /launch/i,
-          /record/i, /milestone/i, /world.*first/i, /australia.*first/i,
-          /electric/i, /hydrogen/i, /autonomous/i, /self.driving/i,
-          /truckie/i, /driver.*story/i, /behind.*wheel/i,
-          /biggest/i, /longest/i, /heaviest/i, /fastest/i,
-          /innovation/i, /future/i, /technology/i,
-          /colourful/i, /unusual/i, /surprising/i, /incredible/i,
-          /community/i, /tribute/i, /legend/i, /icon/i
+        // Driver-specific exclusions on top of shared advocacy patterns
+        const driverExcludePatterns = [
+          ...advocacyPatterns,
+          /chain of responsibility.*framework/i, /cor.*obligations.*operator/i,
+          /duty holder.*analysis/i, /hvnl.*interpretation/i,
+          /refinery.*certification/i, /iso.*certification/i,
+          /gains.*certification/i, /achieves.*certification/i,
+          /crane.*notice/i, /crane.*permit/i, /crane.*movement/i
         ];
 
-        const usedDriverUrls = new Set(driverTop4.map(a => a.url));
-        const driverRemaining = recentArticles.filter(a => !usedDriverUrls.has(a.url));
-        const servoPool = driverRemaining.filter(a => {
-          const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
-          return !industrySlotExclude.some(p => p.test(a.title)) &&
-                 !driverAdvocacyPatterns.some(p => p.test(text));
-        });
+        // Re-score for driver relevance
+        const driverScored = recentArticles
+          .filter(article => {
+            const text = (article.title + ' ' + (article.summary || '')).toLowerCase();
+            if (driverExcludePatterns.some(p => p.test(text))) {
+              console.log(`🚫 Driver pre-filter excluded: ${article.title.substring(0, 60)}...`);
+              return false;
+            }
+            return true;
+          })
+          .map(article => {
+            const text = (article.title + ' ' + (article.summary || '')).toLowerCase();
+            const driverBoost = driverPriorityPatterns.reduce((boost, p) =>
+              p.test(text) ? boost + 15 : boost, 0
+            );
+            return {
+              ...article,
+              compositeScore: (article.compositeScore || article.relevanceScore || 0) + driverBoost
+            };
+          })
+          .sort((a, b) => b.compositeScore - a.compositeScore);
 
-        // Prefer articles matching "servo talk" patterns; fall back to best remaining
-        let servoStory = servoPool.find(a =>
-          servoTalkPatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
-        ) || servoPool[0] || driverRemaining[0];
-
-        if (servoStory) {
-          servoStory = { ...servoStory, category: 'From the Industry' };
-          console.log(`🚐 Servo talk slot: ${servoStory.title.substring(0, 60)}...`);
-        }
-
-        // ── Slot 4: Wellbeing story ──────────────────────────────────────────────
-        // Dedicated mental fitness / physical health slot
-        // Pulled from top 4 if one qualifies, otherwise synthesised by GPT
-
+        // Wellbeing patterns for slot 4 detection
         const wellbeingPatterns = [
           /mental health/i, /mental fitness/i, /wellbeing/i, /well-being/i,
-          /fatigue/i, /burnout/i, /stress/i, /anxiety/i, /depression/i,
-          /sleep/i, /rest/i, /healthy/i, /health.*driver/i, /driver.*health/i,
+          /burnout/i, /stress/i, /anxiety/i, /depression/i,
+          /sleep/i, /healthy/i, /health.*driver/i, /driver.*health/i,
           /support/i, /counselling/i, /counseling/i, /headspace/i,
-          /fitness/i, /exercise/i, /eating/i, /nutrition/i, /diet/i,
-          /isolation/i, /loneliness/i, /connection/i, /community/i,
-          /mindful/i, /resilience/i, /cope/i, /coping/i,
-          /healthy heads/i, /twu.*health/i, /driver.*wellness/i
+          /fitness/i, /nutrition/i, /isolation/i, /loneliness/i,
+          /mindful/i, /resilience/i, /healthy heads/i, /driver.*wellness/i
         ];
 
-        // Find a wellbeing article from the pool — prefer Healthy Heads / TWU sources
+        // Road intel slots: top articles that clear the threshold and aren't wellbeing
+        const roadIntelArticles = driverScored
+          .filter(a => {
+            const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
+            const isWellbeing = wellbeingPatterns.some(p => p.test(text)) || a.category === 'Driver Wellness';
+            return !isWellbeing && (a.compositeScore || 0) >= DRIVER_ROAD_THRESHOLD;
+          })
+          .slice(0, 3);
+
+        console.log(`📊 Driver road intel: ${roadIntelArticles.length} articles above threshold (${DRIVER_ROAD_THRESHOLD})`);
+
+        // Wellbeing slot: use a real article if one clearly qualifies, otherwise synthesise
+        // Only Healthy Heads or explicit wellbeing content qualifies — not TWU by source alone
         const wellbeingFromPool = driverScored.find(a => {
           const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
-          const isWellbeing = wellbeingPatterns.some(p => p.test(text)) ||
-                              a.category === 'Driver Wellness' ||
-                              (a.source || '').toLowerCase().includes('healthy heads') ||
-                              (a.source || '').toLowerCase().includes('twu');
-          return isWellbeing;
+          return wellbeingPatterns.some(p => p.test(text))
+              || a.category === 'Driver Wellness'
+              || (a.source || '').toLowerCase().includes('healthy heads');
         });
-
-        // Build the final 4-slot compliance pool:
-        // Slots 1-3: top road intel (intercepts, defects, regulations)
-        // Slot 4: wellbeing article (from pool or synthesised)
-        const roadIntelArticles = driverTop4.filter(a => {
-          const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
-          return !wellbeingPatterns.some(p => p.test(text)) &&
-                 a.category !== 'Driver Wellness';
-        }).slice(0, 3);
 
         let wellbeingArticle;
         if (wellbeingFromPool) {
           wellbeingArticle = { ...wellbeingFromPool, category: 'Driver Wellness' };
           console.log(`💚 Wellbeing slot (from pool): ${wellbeingArticle.title.substring(0, 60)}...`);
         } else {
-          // No wellbeing article in pool — synthesise one
-          console.log('💚 No wellbeing article in pool — will synthesise wellbeing piece');
+          console.log('💚 Wellbeing slot: synthesising — no real article qualifies');
           wellbeingArticle = { _synthesise: true, category: 'Driver Wellness' };
         }
 
-        const driverFinal4 = [...roadIntelArticles];
-        if (wellbeingArticle) driverFinal4.push(wellbeingArticle);
+        // Servo talk slot: only runs if something genuinely interesting clears threshold
+        const servoTalkPatterns = [
+          /new.*truck/i, /new.*cab/i, /unveil/i, /launch/i,
+          /record/i, /milestone/i, /world.*first/i, /australia.*first/i,
+          /electric/i, /hydrogen/i, /autonomous/i, /self.driving/i,
+          /truckie/i, /driver.*story/i, /behind.*wheel/i,
+          /biggest/i, /longest/i, /heaviest/i, /fastest/i,
+          /innovation/i, /technology/i, /community/i, /tribute/i
+        ];
 
-        // Fill any gap if roadIntelArticles < 3
-        if (roadIntelArticles.length < 3) {
-          const usedInFinal = new Set(driverFinal4.map(a => a.url).filter(Boolean));
-          const fillers = driverScored.filter(a => !usedInFinal.has(a.url) && !a._synthesise);
-          driverFinal4.splice(roadIntelArticles.length, 0, ...fillers.slice(0, 3 - roadIntelArticles.length));
+        const usedUrls = new Set([
+          ...roadIntelArticles.map(a => a.url),
+          ...(wellbeingFromPool ? [wellbeingFromPool.url] : [])
+        ]);
+
+        const servoPool = driverScored.filter(a => {
+          if (usedUrls.has(a.url)) return false;
+          if ((a.compositeScore || 0) < DRIVER_SERVO_THRESHOLD) return false;
+          const text = (a.title + ' ' + (a.summary || '')).toLowerCase();
+          if (industrySlotExclude.some(p => p.test(a.title))) return false;
+          if (advocacyPatterns.some(p => p.test(text))) return false;
+          return true;
+        });
+
+        let servoStory = servoPool.find(a =>
+          servoTalkPatterns.some(p => p.test(a.title + ' ' + (a.summary || '')))
+        ) || servoPool[0] || null;
+
+        if (servoStory) {
+          servoStory = { ...servoStory, category: 'From the Industry' };
+          console.log(`🚐 Servo talk slot: ${servoStory.title.substring(0, 60)}...`);
+        } else {
+          console.log(`🚐 Servo talk slot: skipped — no article cleared threshold (${DRIVER_SERVO_THRESHOLD})`);
         }
 
-        selectedArticles = servoStory
-          ? [...driverFinal4, servoStory]
-          : driverFinal4;
+        const driverFinal = [...roadIntelArticles, wellbeingArticle];
+        if (servoStory) driverFinal.push(servoStory);
 
-        console.log(`✂️ Driver: selected ${roadIntelArticles.length} road intel + 1 wellbeing + ${servoStory ? 1 : 0} servo talk story`);
+        selectedArticles = driverFinal;
+        console.log(`✂️ Driver: ${roadIntelArticles.length} road intel + 1 wellbeing + ${servoStory ? 1 : 0} servo talk = ${selectedArticles.length} total`);
       }
 
       console.log('\n📖 Articles being processed (in priority order):');
@@ -646,14 +647,22 @@ const newsletterResult = {
       const contentLowerFull = (article.title + ' ' + (article.summary || '')).toLowerCase();
       const hasForeignSubject = foreignSubjectMarkers.some(m => contentLowerFull.includes(m));
 
+      // NHVR and NTC sources are inherently Australian — give them a base geo bonus
+      // so their titles (which often lack state names) aren't penalised against trade press
+      const isNhvrSource = ['NHVR Latest News', 'NHVR Consultations', 'NHVR Safety Alerts',
+        'NHVR On the Road Newsletter', 'NTC'].includes(article.source);
+      const baseGeoBonus = isNhvrSource ? 8 : 0;
+
       let geoBonus = 0;
       if (hasForeignSubject) {
         // Hard penalty regardless of incidental Australian mentions
         geoBonus = -20;
       } else if (australianScore > 0) {
-        geoBonus = Math.min(australianScore * 4, 16);  // Capped lower — geo is tiebreaker not primary signal
+        geoBonus = Math.min(baseGeoBonus + australianScore * 4, 16);  // Capped — geo is tiebreaker not primary signal
       } else if (foreignScore > 0) {
         geoBonus = -15;
+      } else {
+        geoBonus = baseGeoBonus;  // NHVR sources get base bonus even with no explicit geo mentions
       }
 
       // Source priority bonus — differentiates articles within same category
@@ -1585,7 +1594,7 @@ OUTPUT FORMAT: Return ONLY a valid JSON object. No markdown, no backticks.
       });
 
       let raw = response.choices[0].message.content.trim()
-        .replace(/\`\`\`json\s*/g, '').replace(/\`\`\`\s*$/g, '').trim();
+        .replace(/```json\s*/g, '').replace(/```\s*$/g, '').trim();
       const parsed = JSON.parse(raw);
       parsed.category = 'Driver Wellness';
       parsed._synthesised = true;
@@ -1600,33 +1609,62 @@ OUTPUT FORMAT: Return ONLY a valid JSON object. No markdown, no backticks.
     const isDriver = segment === 'driver';
 
     const systemPrompt = isDriver
-      ? `You are writing the final story in Safe Freight Mate — a weekly newsletter for Australian truck drivers and owner-operators. This last slot is the one drivers would talk about at a servo or over a pie at a roadhouse — the interesting, surprising, or entertaining story from the industry that week.
+      ? `You are writing the final story in Safe Freight Mate — a weekly newsletter for Australian truck drivers and owner-operators. This last slot is the interesting story from the industry that week — something a driver would mention to a mate at a servo.
 
 CRITICAL: You must NEVER modify, create, or fabricate URLs. Use the EXACT original URL provided.
 
-VOICE: Like a mate who drives trucks telling you something interesting they read. Conversational, direct, a bit colourful. Australian English, no corporate waffle.
+CRITICAL: Do NOT invent, embellish, or add detail that is not in the source article. Report only what the source actually says. If the source is thin, write a shorter summary rather than padding it out.
+
+BANNED PHRASES — never use these:
+- "keep the wheels turning"
+- "it's worth a look"
+- "handy tips"
+- "make a real difference"
+- "not only underscores"
+- "opens the door"
+- "timely reminder"
+- "commitment to"
+- "ongoing efforts"
+- Any phrase that could appear in a corporate press release
+
+VOICE: Direct and plain. Australian English. Tell what actually happened, not why it matters in abstract terms.
 
 OUTPUT FORMAT: Return ONLY a valid JSON array containing ONE object. No markdown, no backticks.
 
 {
-  "title": "The kind of headline that makes a driver say \"did you see this?\" — direct, a bit punchy, no fluff",
-  "summary": "2-3 sentences that tell the story the way you'd tell it to another driver. What happened, why it's interesting or surprising, what it means for people on the road. Can be about a new truck, a record, something unusual, a colourful court case, an industry character — anything genuinely worth talking about.",
+  "title": "Direct headline based on what actually happened — no fluff",
+  "summary": "2-3 sentences. Stick strictly to the facts in the source. What happened, the key detail, why a driver would care. Short is better than padded.",
   "tip": "",
   "url": "EXACT original URL — never modify",
   "source": "Original source name",
   "category": "From the Industry"
 }`
-      : `You are writing the final item in a professional Australian transport newsletter. This slot is called "From the Industry" and is intentionally lighter in tone — it is the human interest or interesting innovation story at the end of the edition, designed to reward readers who make it to the bottom.
+      : `You are writing the final item in a professional Australian transport newsletter — the "From the Industry" slot that closes the edition.
 
 CRITICAL: You must NEVER modify, create, or fabricate URLs. Use the EXACT original URL provided.
 
-LANGUAGE: Australian English, British spelling. Conversational but professional — written for experienced transport industry people.
+CRITICAL: Do NOT invent, embellish, or add detail not present in the source. If the source is thin, keep the summary short rather than padding.
+
+BANNED PHRASES — never use these:
+- "not only underscores"
+- "opens the door"
+- "timely reminder"
+- "commitment to"
+- "ongoing efforts"  
+- "innovative approaches"
+- "it's worth a look"
+- "this initiative"
+- "exciting development"
+- "exciting opportunity"
+- Any phrase that reads like a corporate press release
+
+LANGUAGE: Australian English, British spelling. Conversational but professional.
 
 OUTPUT FORMAT: Return ONLY a valid JSON array containing ONE object. No markdown, no backticks.
 
 {
-  "title": "Engaging headline that a transport professional would want to click",
-  "summary": "2-3 sentences in a natural, readable tone. No forced compliance angle. Just tell the story — what happened, why it's interesting, what it means for the industry. This can be about a new vehicle, an industry milestone, an innovation, a person, or anything genuinely interesting to people who work in transport.",
+  "title": "Clear, direct headline based strictly on what the article actually says",
+  "summary": "2-3 sentences. Report only what the source states — what happened, the key facts. Short is better than padded.",
   "tip": "",
   "url": "EXACT original URL — never modify",
   "source": "Original source name",
