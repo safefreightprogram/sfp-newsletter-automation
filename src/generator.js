@@ -181,6 +181,10 @@ class NewsletterGenerator {
           const isGuidance = ['NHVR Consultations', 'NHVR Publications', 'NTC'].includes(a.source)
                           || (a.category || '') === 'Regulatory Guidance';
           if (isGuidance) return false;
+          // Enforcement sources belong in compliance slots, not the industry slot
+          const isEnforcement = ['SafeWork NSW', 'JADE Court Decisions', 'Federal Court Judgments'].includes(a.source)
+                             || (a.category || '') === 'Enforcement Action';
+          if (isEnforcement) return false;
           if (advocacyPatterns.some(p => p.test(text))) return false;
           if (industrySlotExclude.some(p => p.test(a.title))) return false;
           return (a.compositeScore || a.relevanceScore || 0) >= PRO_INDUSTRY_THRESHOLD;
@@ -343,21 +347,27 @@ class NewsletterGenerator {
 
       console.log('\n📖 Articles being processed (in priority order):');
       selectedArticles.forEach((article, i) => {
-        console.log(`${i + 1}. [${article.category || 'Uncategorized'}] ${article.title.substring(0, 60)}...`);
-        console.log(`   📊 Score: ${article.compositeScore?.toFixed(1) || article.relevanceScore || 'N/A'} | Source: ${article.source}`);
+        const displayTitle = article._synthesise ? '[SYNTHESISED]' : (article.title || '[no title]');
+        console.log(`${i + 1}. [${article.category || 'Uncategorized'}] ${displayTitle.substring(0, 60)}...`);
+        console.log(`   📊 Score: ${article.compositeScore?.toFixed(1) || article.relevanceScore || 'N/A'} | Source: ${article.source || 'synthesised'}`);
       });
 
       // Fetch publish dates for the 5 selected articles
       // Only fetches article pages for final selected articles — not the whole pool
       console.log('📅 Fetching publish dates for selected articles...');
       await Promise.all(selectedArticles.map(async (article) => {
+        // Skip synthesised placeholder articles — they have no URL or title
+        if (article._synthesise) return;
+
+        const safeTitle = (article.title || '').substring(0, 40);
+
         // Skip if we already have a real date (e.g. from RSS pubDate)
         if (article.publishedAt) {
           const d = new Date(article.publishedAt);
           // If it's today (scrape time fallback), treat as missing
           const isToday = d.toDateString() === new Date().toDateString();
           if (!isToday) {
-            console.log(`  ✅ Date already known: ${article.title.substring(0, 40)}...`);
+            console.log(`  ✅ Date already known: ${safeTitle}...`);
             return;
           }
         }
@@ -387,13 +397,13 @@ class NewsletterGenerator {
             const parsed = new Date(dateStr);
             if (!isNaN(parsed.getTime())) {
               article.publishedAt = parsed.toISOString();
-              console.log(`  ✅ Date fetched: ${parsed.toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' })} — ${article.title.substring(0, 40)}...`);
+              console.log(`  ✅ Date fetched: ${parsed.toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' })} — ${safeTitle}...`);
               return;
             }
           }
-          console.log(`  ⚠️ No date found: ${article.title.substring(0, 40)}...`);
+          console.log(`  ⚠️ No date found: ${safeTitle}...`);
         } catch (err) {
-          console.log(`  ❌ Date fetch failed: ${article.title.substring(0, 40)}... (${err.message})`);
+          console.log(`  ❌ Date fetch failed: ${safeTitle}... (${err.message})`);
         }
       }));
 
@@ -1044,7 +1054,7 @@ OUTPUT FORMAT: Return ONLY valid JSON array. No markdown formatting, no code blo
 For each article, provide:
 {
   "title": "Professional title stating the compliance impact directly — no hedging",
-  "summary": "2-3 sentences. Lead with the specific facts — what was announced, decided, or changed, and the concrete details (amounts, parties, locations, dates). Then state the direct compliance implication. NEVER use these phrases: 'engages CoR obligations', 'immediate exposure', 'duty holders must', 'this review engages', 'impacting duty holders'. Write what actually happened in plain language.",
+  "summary": "2-3 sentences. Lead with the specific facts — what was announced, decided, or changed, and the concrete details (amounts, parties, locations, dates). Then state the compliance implication. NEVER bleed action-tip language into the summary — the summary describes what happened, the tip says what to do. NEVER use: 'engages CoR obligations', 'immediate exposure', 'duty holders must', 'compliance teams should', 'operators should'. Write what actually happened in plain language.",
   "tip": "One directive, specific action. Name the task, the person responsible, and a timeframe. Reference actual compliance instruments where relevant. Do NOT predict legal outcomes. Do NOT use hedging language.",
   "url": "EXACT original URL - NEVER modify, create, or change this",
   "source": "Original source name",
