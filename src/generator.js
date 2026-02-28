@@ -1279,13 +1279,13 @@ const preheaderText = isPro
   ? `${title} — ${tagline}. This week’s key safety, enforcement, and regulatory updates.`
   : `${title} — ${tagline}. Quick weekly safety and compliance heads-up.`;
 
-// Enhanced date formatting
-const date = new Date();
-const formattedDate = date.toLocaleDateString('en-AU', {
+// Date formatted in Sydney time (AEDT/AEST) — server runs UTC, readers are in Australia
+const formattedDate = new Date().toLocaleDateString('en-AU', {
   weekday: 'long',
   day: 'numeric',
   month: 'long',
-  year: 'numeric'
+  year: 'numeric',
+  timeZone: 'Australia/Sydney'
 });
 
   
@@ -1422,20 +1422,26 @@ const pauseUrl = '{{PAUSE_URL}}';
                 <tr>
                   <td align="center" style="padding:28px 16px;">
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;">
-<!-- Text-first brand line (renders even if images are blocked) -->
+<!-- Logo with graceful fallback: if image blocked/fails, shows "Safe Freight Program" text instead -->
+<!-- The role=img + aria-label on the outer td ensures screen readers announce the brand regardless -->
 <tr>
-  <td align="center" style="padding: 0 0 10px 0; font: 600 13px/1.2 ${SFP_BRAND.typography.primary}; color: ${SFP_BRAND.colors.blue100}; letter-spacing: 0.3px;">
-    Safe Freight Program
-  </td>
-</tr>
-                      <!-- Logo -->
-<tr>
-  <td align="center" style="padding: 0 0 16px 0;">
+  <td align="center" style="padding: 0 0 16px 0;" role="img" aria-label="Safe Freight Program">
+    <!--[if !mso]><!-->
     <img src="${SFP_BRAND.logo.url}"
-     width="${SFP_BRAND.logo.width}"
-     height="${SFP_BRAND.logo.height}"
-     alt="${SFP_BRAND.logo.alt}"
-     style="display:block; border:0; outline:none; text-decoration:none; margin:0 auto;">
+         width="${SFP_BRAND.logo.width}"
+         height="${SFP_BRAND.logo.height}"
+         alt="Safe Freight Program"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='block';"
+         style="display:block; border:0; outline:none; text-decoration:none; margin:0 auto;">
+    <span style="display:none; font: 600 15px/1.2 ${SFP_BRAND.typography.primary}; color: #ffffff; letter-spacing: 0.3px;">
+      Safe Freight Program
+    </span>
+    <!--<![endif]-->
+    <!--[if mso]>
+    <p style="font: 600 15px/1.2 Arial, sans-serif; color: #ffffff; margin:0; text-align:center;">
+      Safe Freight Program
+    </p>
+    <![endif]-->
   </td>
 </tr>
 
@@ -1528,8 +1534,8 @@ const pauseUrl = '{{PAUSE_URL}}';
                     <h3 style="margin: 0 0 8px 0; color: ${color}; font-size: 18px; font-weight: 600;">
                       Safe Freight Program
                     </h3>
-                    <p style="margin: 0; color: #6b7280; font-size: 14px;">
-                      Heavy Vehicle Compliance
+                    <p style="margin: 4px 0 0 0; color: #6b7280; font-size: 13px; font-style: italic; letter-spacing: 0.3px;">
+                      Checked. Passed. Proof.
                     </p>
                   </td>
                 </tr>
