@@ -59,8 +59,8 @@ class AdvancedScheduler {
   }
 
   validateScheduleConfig(config) {
-    if (config.frequency && !['weekly', 'fortnightly', 'monthly'].includes(config.frequency)) {
-      throw new Error('Frequency must be weekly, fortnightly, or monthly');
+    if (config.frequency && !['daily', 'weekly', 'fortnightly', 'monthly'].includes(config.frequency)) {
+      throw new Error('Frequency must be daily, weekly, fortnightly, or monthly');
     }
     
     if (config.dayOfWeek !== undefined && (config.dayOfWeek < 0 || config.dayOfWeek > 6)) {
@@ -112,6 +112,9 @@ class AdvancedScheduler {
     const { frequency, dayOfWeek, hour, minute, weekOfMonth } = config;
     
     switch (frequency) {
+      case 'daily':
+        return `${minute} ${hour} * * *`;
+
       case 'weekly':
         return `${minute} ${hour} * * ${dayOfWeek}`;
         
@@ -160,6 +163,11 @@ class AdvancedScheduler {
       // Mark completion for dependency tracking
       this.markJobComplete(jobType);
       this.scheduleConfig[jobType].lastRun = new Date();
+      
+      // Log to Events_Log and update in-memory systemState if callback registered
+      if (typeof this.onJobComplete === 'function') {
+        await this.onJobComplete(jobType).catch(e => console.warn('onJobComplete callback error:', e.message));
+      }
       
       console.log(`✅ ${jobType} completed successfully`);
       
@@ -306,6 +314,9 @@ async runJobFunction(jobType) {
     const time = `${config.hour.toString().padStart(2, '0')}:${config.minute.toString().padStart(2, '0')}`;
     
     switch (config.frequency) {
+      case 'daily':
+        return `Every day at ${time} AEST`;
+
       case 'weekly':
         return `Every ${dayName} at ${time} AEST`;
         
