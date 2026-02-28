@@ -279,7 +279,7 @@ app.post('/api/scrape', async (req, res) => {
     
     if (articles.length > 0) {
       try {
-        const SheetsManager = require('../config/sheets');
+        const SheetsManager = require('./sheets');
         const sheetsManager = new SheetsManager();
         await sheetsManager.initialize();
         const savedArticles = await sheetsManager.saveArticles(articles);
@@ -1919,7 +1919,7 @@ app.get('/api/subscribers/csv', async (req, res) => {
 app.get('/api/subscriber/:id', async (req, res) => {
   try {
     const email = decodeURIComponent(req.params.id);
-    const SheetsManager = require('./config/sheets');
+    const SheetsManager = require('./sheets');
     const sheetsManager = new SheetsManager();
     await sheetsManager.initialize();
     const s = await sheetsManager.getSubscriberByEmail(email);
@@ -1934,7 +1934,7 @@ app.put('/api/subscriber/:id', async (req, res) => {
   try {
     const email = decodeURIComponent(req.params.id);
     const payload = req.body || {};
-    const SheetsManager = require('./config/sheets');
+    const SheetsManager = require('./sheets');
     const sheetsManager = new SheetsManager();
     await sheetsManager.initialize();
     const updated = await sheetsManager.updateSubscriberByEmail(email, payload);
