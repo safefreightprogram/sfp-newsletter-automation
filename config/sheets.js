@@ -329,6 +329,86 @@ await sheet.addRow({
       return false;
     }
   }
+
+  // ── Subscriber lookup by email (used by GET /api/subscriber/:id)
+  async getSubscriberByEmail(email) {
+    const auth = await this.getAuth();
+    const sheets = require('googleapis').google.sheets({ version: 'v4', auth });
+    const resp = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Subscribers!A:Z'
+    });
+    const rows = resp.data.values || [];
+    if (rows.length < 2) return null;
+    const headers = rows[0].map(h => (h || '').trim());
+    const emailIdx = headers.findIndex(h => h.toLowerCase() === 'email');
+    if (emailIdx === -1) return null;
+    const row = rows.find((r, i) => i > 0 && (r[emailIdx] || '').toLowerCase() === email.toLowerCase());
+    if (!row) return null;
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+    // Normalise to fields the dashboard expects
+    return {
+      email: obj['Email'] || obj['email'] || email,
+      name: obj['Name'] || obj['name'] || '',
+      segment: obj['Segment'] || obj['segment'] || '',
+      company: obj['Company'] || obj['company'] || '',
+      role: obj['Role'] || obj['role'] || '',
+      status: obj['Status'] || obj['status'] || 'active',
+      subscriberId: obj['Subscriber_ID'] || '',
+      subscribedAt: obj['Subscribed_At'] || '',
+      confirmedAt: obj['Confirmed_At'] || ''
+    };
+  }
+
+  // ── Subscriber update by email (used by PUT /api/subscriber/:id)
+  async updateSubscriberByEmail(email, payload) {
+    const auth = await this.getAuth();
+    const { google } = require('googleapis');
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+    const resp = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Subscribers!A:Z' });
+    const rows = resp.data.values || [];
+    if (rows.length < 2) throw new Error('Subscribers sheet is empty');
+    const headers = rows[0].map(h => (h || '').trim());
+    const emailIdx = headers.findIndex(h => h.toLowerCase() === 'email');
+    if (emailIdx === -1) throw new Error('Email column not found');
+    const rowIdx = rows.findIndex((r, i) => i > 0 && (r[emailIdx] || '').toLowerCase() === email.toLowerCase());
+    if (rowIdx === -1) throw new Error(`Subscriber not found: ${email}`);
+    // Build updated row — preserve existing values, overwrite only provided fields
+    const row = [...rows[rowIdx]];
+    const set = (colName, val) => {
+      const i = headers.findIndex(h => h.toLowerCase() === colName.toLowerCase());
+      if (i !== -1 && val !== undefined) row[i] = val;
+    };
+    if (payload.name    !== undefined) set('Name',    payload.name);
+    if (payload.segment !== undefined) set('Segment', payload.segment);
+    if (payload.company !== undefined) set('Company', payload.company);
+    if (payload.role    !== undefined) set('Role',    payload.role);
+    if (payload.status  !== undefined) set('Status',  payload.status);
+    set('Updated_At', new Date().toISOString());
+    const lastCol = String.fromCharCode(65 + headers.length - 1);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `Subscribers!A${rowIdx + 1}:${lastCol}${rowIdx + 1}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [row] }
+    });
+    return await this.getSubscriberByEmail(email);
+  }
+
+  // ── Helper: get auth client
+  async getAuth() {
+    const { google } = require('googleapis');
+    return google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+  }
+
 }
 
 module.exports = SheetsManager;
