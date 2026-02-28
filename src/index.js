@@ -246,6 +246,7 @@ app.post('/api/newsletter/generate/:segment', async (req, res) => {
         subject: newsletter.subject,
         articlesCount: newsletter.articles?.length || 0,
         previewHtml: newsletter.html,
+        previewText: newsletter.text,
         generatedAt: new Date().toISOString()
       }
     });
