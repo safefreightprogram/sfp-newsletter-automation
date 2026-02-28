@@ -3,34 +3,73 @@ const cron = require('node-cron');
 // Advanced Scheduling System for Newsletter Automation
 // Supports weekly/fortnightly/monthly schedules with scraping dependencies
 
+const fs = require('fs');
+const path = require('path');
+
+// Persistent schedule config — survives Railway restarts when using a volume,
+// or falls back to defaults if the file doesn't exist yet.
+const SCHEDULE_CONFIG_PATH = path.join(__dirname, 'schedule-config.json');
+
+const DEFAULT_SCHEDULE_CONFIG = {
+  scraping: {
+    enabled: true,
+    frequency: 'weekly',
+    dayOfWeek: 1,      // Monday
+    hour: 16,
+    minute: 45,
+    weekOfMonth: null,
+    lastRun: null
+  },
+  newsletter: {
+    enabled: true,
+    frequency: 'weekly',
+    dayOfWeek: 1,
+    hour: 17,
+    minute: 30,
+    weekOfMonth: null,
+    dependsOn: 'scraping',
+    delayAfterDependency: 45,
+    lastRun: null
+  }
+};
+
+function loadScheduleConfig() {
+  try {
+    if (fs.existsSync(SCHEDULE_CONFIG_PATH)) {
+      const saved = JSON.parse(fs.readFileSync(SCHEDULE_CONFIG_PATH, 'utf8'));
+      console.log('📅 Loaded persisted schedule config from schedule-config.json');
+      // Merge with defaults to pick up any new fields added in code
+      return {
+        scraping:   { ...DEFAULT_SCHEDULE_CONFIG.scraping,   ...saved.scraping },
+        newsletter: { ...DEFAULT_SCHEDULE_CONFIG.newsletter, ...saved.newsletter }
+      };
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not load schedule-config.json, using defaults:', e.message);
+  }
+  return JSON.parse(JSON.stringify(DEFAULT_SCHEDULE_CONFIG));
+}
+
+function saveScheduleConfig(config) {
+  try {
+    // Don't persist lastRun here — that's tracked by Events_Log
+    const toSave = {
+      scraping: { ...config.scraping, lastRun: undefined },
+      newsletter: { ...config.newsletter, lastRun: undefined }
+    };
+    fs.writeFileSync(SCHEDULE_CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf8');
+    console.log('💾 Schedule config saved to schedule-config.json');
+  } catch (e) {
+    console.warn('⚠️ Could not save schedule-config.json:', e.message);
+  }
+}
+
 class AdvancedScheduler {
   constructor() {
     this.activeJobs = new Map();
-    this.scheduleConfig = {
-      scraping: {
-        enabled: true,
-        frequency: 'weekly', // weekly, fortnightly, monthly
-        dayOfWeek: 1, // 0=Sunday, 1=Monday, etc.
-        hour: 16,
-        minute: 45,
-        weekOfMonth: null, // For monthly: 1=first week, 2=second week, etc.
-        lastRun: null
-      },
-      newsletter: {
-        enabled: true,
-        frequency: 'weekly',
-        dayOfWeek: 1,
-        hour: 17,
-        minute: 30,
-        weekOfMonth: null,
-        dependsOn: 'scraping', // Wait for scraping to complete
-        delayAfterDependency: 45, // Minutes to wait after scraping finishes
-        lastRun: null
-      }
-    };
-    
+    this.scheduleConfig = loadScheduleConfig();
     this.cronJobs = new Map();
-    this.dependencies = new Map(); // Track job completion for dependencies
+    this.dependencies = new Map();
   }
 
   // Initialize the scheduling system
@@ -50,6 +89,9 @@ class AdvancedScheduler {
     
     // Update configuration
     this.scheduleConfig[jobType] = { ...this.scheduleConfig[jobType], ...config };
+    
+    // Persist immediately so the change survives Railway restarts
+    saveScheduleConfig(this.scheduleConfig);
     
     // Restart the specific job with new schedule
     this.restartJob(jobType);
