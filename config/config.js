@@ -185,9 +185,17 @@ module.exports = {
       category: 'enforcement',
       enabled: true,
       requireKeywords: [
-        'transport', 'truck', 'driver', 'vehicle', 'freight',
-        'prosecution', 'penalty', 'fatigue', 'load', 'chain of responsibility',
-        'operator', 'worker', 'fatality', 'serious injury'
+        // Must mention a transport/heavy vehicle context — not just any prosecution
+        'truck', 'heavy vehicle', 'transport operator', 'freight',
+        'chain of responsibility', 'fatigue', 'load restraint', 'overloading',
+        'road transport', 'logistics operator', 'transport company'
+      ],
+      excludeKeywords: [
+        // General WHS prosecutions unrelated to road transport
+        'construction', 'farm', 'farmer', 'forklift', 'warehouse',
+        'retail', 'restaurant', 'school', 'hospital', 'aged care',
+        'conveyor', 'pallet rider', 'electric shock', 'fall from height',
+        'scaffolding', 'asbestos', 'silica', 'chemical', 'mine', 'mining'
       ]
     },
 
