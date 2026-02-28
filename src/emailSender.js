@@ -6,7 +6,7 @@ class EmailSender {
     this.resendApiKey = process.env.RESEND_API_KEY;
     this.resendApiUrl = 'https://api.resend.com/emails';
     
-    // Subscribers Sheet URLs 
+    // Subscribers Sheet URLs
     this.SUBSCRIBERS_SHEET_URLS = [
       'https://docs.google.com/spreadsheets/d/1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM/gviz/tq?tqx=out:json',
       'https://docs.google.com/spreadsheets/d/1Gz3qHzlxPGsI-ar-d28zoE-oTfrfmxGnXyPmko76uNM/gviz/tq?tqx=out:csv',
@@ -51,11 +51,13 @@ class EmailSender {
       const failedEmails = [];
       
       // Process emails individually with Resend
+      const sentEmails = [];  // Track Resend IDs for analytics
       for (const subscriber of subscribers) {
         try {
-          await this.sendSingleEmail(newsletterData, subscriber);
+          const result = await this.sendSingleEmail(newsletterData, subscriber);
           sentCount++;
-          console.log(`✅ Sent to ${subscriber.email}`);
+          if (result.resend_id) sentEmails.push(result);
+          console.log(`✅ Sent to ${subscriber.email} (ID: ${result.resend_id || 'unknown'})`);
           
           // Rate limiting - Resend allows 10 req/sec on free tier
           await new Promise(resolve => setTimeout(resolve, 150)); // 150ms delay
@@ -74,7 +76,8 @@ class EmailSender {
         sentCount,
         failedCount,
         failedEmails,
-        totalSubscribers: subscribers.length
+        totalSubscribers: subscribers.length,
+        sentEmails   // Resend IDs for Send_Log storage
       };
       
     } catch (error) {
@@ -97,8 +100,8 @@ class EmailSender {
 
     const unsubscribeUrl = `${apiBaseUrl}/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
 
-    // (pause can come later — for now, don't pretend it exists)
-    const pauseUrl = '';
+    // Pause URL — subscriber clicks to pause 4 weeks; uses same unsub token for identity
+    const pauseUrl = `${apiBaseUrl}/api/pause?token=${encodeURIComponent(unsubscribeToken)}`;
 
     
     // Personalize HTML
@@ -124,15 +127,12 @@ class EmailSender {
         'List-Unsubscribe': `<${unsubscribeUrl}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
       },
+      // Enable tracking so we can pull engagement data back from Resend API
+      open_tracking: true,
+      click_tracking: true,
       tags: [
-        {
-          name: 'newsletter',
-          value: newsletterData.segment
-        },
-        {
-          name: 'issue_id', 
-          value: issueId
-        }
+        { name: 'newsletter', value: newsletterData.segment },
+        { name: 'issue_id',   value: issueId }
       ]
     };
     
@@ -145,7 +145,16 @@ class EmailSender {
         timeout: 30000
       });
       
-      return response.data;
+      // Return enriched result including Resend email ID for analytics tracking
+      return {
+        ...response.data,
+        resend_id: response.data.id,
+        subscriber_email: subscriber.email,
+        subscriber_id: subscriber.Subscriber_ID || subscriber.subscriber_id || '',
+        issue_id: issueId,
+        segment: newsletterData.segment,
+        sent_at: new Date().toISOString()
+      };
       
     } catch (error) {
       if (error.response) {
@@ -229,8 +238,6 @@ async getSubscribersFromSheet(segment) {
         const company        = safeCell(row, companyCol);
         const confirmedAt    = safeCell(row, confirmedCol);
         const unsubToken     = safeCell(row, unsubTokenCol); // FIX: fetch token
-                console.log(`DEBUG: email=${email}, unsubTokenCol=${unsubTokenCol}, rowLength=${row.length}, unsubToken="${unsubToken}"`);
-
 
         
         // Validate email
