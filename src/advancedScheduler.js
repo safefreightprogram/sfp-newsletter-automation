@@ -8,7 +8,10 @@ const path = require('path');
 
 // Persistent schedule config — survives Railway restarts when using a volume,
 // or falls back to defaults if the file doesn't exist yet.
-const SCHEDULE_CONFIG_PATH = path.join(__dirname, 'schedule-config.json');
+// Railway's /app/src is read-only; /tmp is writable and persists within a deployment
+// For true persistence across restarts, we also write to a known fallback location
+const SCHEDULE_CONFIG_PATH = process.env.SCHEDULE_CONFIG_PATH || 
+  (require('fs').existsSync('/tmp') ? '/tmp/schedule-config.json' : path.join(__dirname, 'schedule-config.json'));
 
 const DEFAULT_SCHEDULE_CONFIG = {
   scraping: {
@@ -37,7 +40,7 @@ function loadScheduleConfig() {
   try {
     if (fs.existsSync(SCHEDULE_CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(SCHEDULE_CONFIG_PATH, 'utf8'));
-      console.log('📅 Loaded persisted schedule config from schedule-config.json');
+      console.log('📅 Loaded persisted schedule config from:', SCHEDULE_CONFIG_PATH);
       // Merge with defaults to pick up any new fields added in code
       return {
         scraping:   { ...DEFAULT_SCHEDULE_CONFIG.scraping,   ...saved.scraping },
@@ -58,7 +61,7 @@ function saveScheduleConfig(config) {
       newsletter: { ...config.newsletter, lastRun: undefined }
     };
     fs.writeFileSync(SCHEDULE_CONFIG_PATH, JSON.stringify(toSave, null, 2), 'utf8');
-    console.log('💾 Schedule config saved to schedule-config.json');
+    console.log('💾 Schedule config saved to:', SCHEDULE_CONFIG_PATH);
   } catch (e) {
     console.warn('⚠️ Could not save schedule-config.json:', e.message);
   }
