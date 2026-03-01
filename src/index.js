@@ -844,6 +844,49 @@ app.get('/api/newsletters', async (req, res) => {
 });
 
 // --- SUBSCRIBER MANAGEMENT ---
+// Helper: read ALL subscribers from sheet regardless of status (for dashboard display)
+async function getAllSubscribersFromSheet(segmentFilter) {
+  const { google } = require('googleapis');
+  const auth = await google.auth.getClient({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+  });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const resp = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+    range: 'Subscribers!A:Z'
+  });
+  const rows = resp.data.values || [];
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(h => (h || '').trim());
+  const col = (n) => headers.findIndex(h => h.toLowerCase() === n.toLowerCase());
+  const emailIdx = col('Email'); const nameIdx = col('Name'); const segIdx = col('Segment');
+  const statusIdx = col('Status'); const companyIdx = col('Company'); const roleIdx = col('Role');
+  const subIdIdx = col('Subscriber_ID'); const subAtIdx = col('Subscribed_At');
+  const confirmedIdx = col('Confirmed_At'); const pausedIdx = col('Paused_At');
+  if (emailIdx === -1 || segIdx === -1) return [];
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const email = (r[emailIdx] || '').trim();
+    if (!email || !email.includes('@')) continue;
+    const segRaw = (r[segIdx] || '').trim().toLowerCase();
+    const segs = segRaw.split(',').map(s => s.trim()).filter(Boolean);
+    if (segmentFilter && !segs.includes(segmentFilter.toLowerCase())) continue;
+    result.push({
+      email, name: (r[nameIdx] || '').trim(),
+      segment: r[segIdx] || '', status: (r[statusIdx] || 'pending').trim(),
+      company: (r[companyIdx] || '').trim(), role: (r[roleIdx] || '').trim(),
+      subscriberId: r[subIdIdx] || '', subscribedAt: r[subAtIdx] || '',
+      confirmedAt: r[confirmedIdx] || '', pausedAt: r[pausedIdx] || ''
+    });
+  }
+  return result;
+}
+
 app.get('/api/subscribers/:segment?', async (req, res) => {
   try {
     const segment = req.params.segment;
@@ -851,42 +894,32 @@ app.get('/api/subscribers/:segment?', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid segment.' });
     }
     if (segment) {
-      const subscribers = await emailSender.getSubscribersFromSheet(segment);
+      // For single segment: return all statuses for dashboard
+      const subscribers = await getAllSubscribersFromSheet(segment);
       return res.json({ success: true, data: { segment, subscribers } });
     } else {
       const [pro, driver] = await Promise.all([
-        emailSender.getSubscribersFromSheet('pro'),
-        emailSender.getSubscribersFromSheet('driver')
+        getAllSubscribersFromSheet('pro'),
+        getAllSubscribersFromSheet('driver')
       ]);
-      // Counts: treat "active" as the truth for totals (future-proof)
-const proActive = pro.filter(s => (s.status || '').toLowerCase() === 'active');
-const driverActive = driver.filter(s => (s.status || '').toLowerCase() === 'active');
-
-// Unique active subscribers = unique emails across both active lists
-const uniqueActiveEmails = new Set(
-  [...proActive, ...driverActive]
-    .map(s => (s.email || '').trim().toLowerCase())
-    .filter(Boolean)
-);
-
-return res.json({
-  success: true,
-  data: {
-    summary: {
-      // Unique people
-      totalActiveSubscribers: uniqueActiveEmails.size,
-
-      // Subscriptions (double-counts dual opt-in by design)
-      totalActiveSubscriptions: proActive.length + driverActive.length,
-
-      // Segment subscription counts
-      proActive: proActive.length,
-      driverActive: driverActive.length
-    },
-    pro: { count: pro.length, subscribers: pro },
-    driver: { count: driver.length, subscribers: driver }
-  }
-});
+      const proActive = pro.filter(s => (s.status || '').toLowerCase() === 'active');
+      const driverActive = driver.filter(s => (s.status || '').toLowerCase() === 'active');
+      const uniqueActiveEmails = new Set(
+        [...proActive, ...driverActive].map(s => (s.email || '').trim().toLowerCase()).filter(Boolean)
+      );
+      return res.json({
+        success: true,
+        data: {
+          summary: {
+            totalActiveSubscribers: uniqueActiveEmails.size,
+            totalActiveSubscriptions: proActive.length + driverActive.length,
+            proActive: proActive.length,
+            driverActive: driverActive.length
+          },
+          pro: { count: proActive.length, subscribers: pro },
+          driver: { count: driverActive.length, subscribers: driver }
+        }
+      });
     }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -1355,6 +1388,124 @@ const html = `<!doctype html>
   } catch (error) {
     console.error('Error adding subscriber:', error);
     return res.status(500).json({ success: false, error: error.message || 'Failed to add subscriber' });
+  }
+});
+
+// Admin: add subscriber directly (bypasses email confirmation, sets active immediately)
+app.post('/api/admin/subscriber', async (req, res) => {
+  try {
+    const { email, name, segment, company, role, status } = req.body || {};
+    if (!email) return res.status(400).json({ success: false, error: 'Email is required' });
+    if (!segment) return res.status(400).json({ success: false, error: 'Segment is required' });
+
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+
+    // Read existing sheet
+    const existing = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Subscribers!A:Z' });
+    const rows = existing.data.values || [];
+    const headers = (rows[0] || []).map(h => (h || '').toString().trim());
+    const colIdx = (n) => headers.findIndex(h => h.toLowerCase() === n.toLowerCase());
+
+    const now = new Date().toISOString();
+    const unsubToken = crypto.randomBytes(16).toString('hex');
+    const subscriberId = `SUB-${Date.now()}`;
+
+    // Check if already exists
+    const emailIdx = colIdx('Email');
+    const existingRow = rows.findIndex((r, i) => i > 0 && (r[emailIdx] || '').toLowerCase() === email.toLowerCase());
+
+    const outRow = new Array(headers.length).fill('');
+    if (existingRow !== -1) {
+      const er = rows[existingRow] || [];
+      for (let i = 0; i < outRow.length; i++) outRow[i] = er[i] ?? '';
+    }
+
+    const set = (col, val) => { const i = colIdx(col); if (i !== -1) outRow[i] = val ?? ''; };
+    set('Subscriber_ID', existingRow !== -1 ? (rows[existingRow][colIdx('Subscriber_ID')] || subscriberId) : subscriberId);
+    set('Email', email.trim().toLowerCase());
+    set('Name', name || '');
+    set('Segment', segment.trim());
+    set('Status', status || 'active');
+    set('Subscribed_At', existingRow !== -1 ? (rows[existingRow][colIdx('Subscribed_At')] || now) : now);
+    set('Confirmed_At', now);
+    set('Unsub_Token', existingRow !== -1 ? (rows[existingRow][colIdx('Unsub_Token')] || unsubToken) : unsubToken);
+    set('Company', company || '');
+    set('Role', role || '');
+    set('Updated_At', now);
+    set('Unsubscribed_At', '');
+    set('Paused_At', '');
+    set('Resume_At', '');
+
+    if (existingRow !== -1) {
+      const lastCol = String.fromCharCode(65 + headers.length - 1);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId, range: `Subscribers!A${existingRow + 1}:${lastCol}${existingRow + 1}`,
+        valueInputOption: 'RAW', requestBody: { values: [outRow] }
+      });
+    } else {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId, range: 'Subscribers!A:Z',
+        valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: [outRow] }
+      });
+    }
+
+    return res.json({ success: true, message: `Subscriber ${email} added/updated as active` });
+  } catch (e) {
+    console.error('Admin add subscriber error:', e.message);
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Admin: activate a pending subscriber
+app.post('/api/admin/subscriber/activate', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ success: false, error: 'Email required' });
+
+    const auth = await google.auth.getClient({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+    const resp = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Subscribers!A:Z' });
+    const rows = resp.data.values || [];
+    const headers = (rows[0] || []).map(h => (h || '').trim());
+    const emailIdx = headers.findIndex(h => h.toLowerCase() === 'email');
+    const statusIdx = headers.findIndex(h => h.toLowerCase() === 'status');
+    const confirmedIdx = headers.findIndex(h => h.toLowerCase() === 'confirmed_at');
+    const updatedIdx = headers.findIndex(h => h.toLowerCase() === 'updated_at');
+
+    const rowIdx = rows.findIndex((r, i) => i > 0 && (r[emailIdx] || '').toLowerCase() === email.toLowerCase());
+    if (rowIdx === -1) return res.status(404).json({ success: false, error: 'Subscriber not found' });
+
+    const row = [...rows[rowIdx]];
+    const now = new Date().toISOString();
+    if (statusIdx !== -1) row[statusIdx] = 'active';
+    if (confirmedIdx !== -1) row[confirmedIdx] = now;
+    if (updatedIdx !== -1) row[updatedIdx] = now;
+
+    const lastCol = String.fromCharCode(65 + headers.length - 1);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `Subscribers!A${rowIdx + 1}:${lastCol}${rowIdx + 1}`,
+      valueInputOption: 'RAW', requestBody: { values: [row] }
+    });
+
+    return res.json({ success: true, message: `${email} activated` });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
   }
 });
 
