@@ -124,10 +124,10 @@ app.use(express.static('assets', {
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN DASHBOARD ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../newsletter-management.html')));
-app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, '../newsletter-management.html')));
-app.get('/newsletter-management', (req, res) => res.sendFile(path.join(__dirname, '../newsletter-management.html')));
-app.get('/newsletter-management.html', (req, res) => res.sendFile(path.join(__dirname, '../newsletter-management.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../public/newsletter-management.html')));
+app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, '../public/newsletter-management.html')));
+app.get('/newsletter-management', (req, res) => res.sendFile(path.join(__dirname, '../public/newsletter-management.html')));
+app.get('/newsletter-management.html', (req, res) => res.sendFile(path.join(__dirname, '../public/newsletter-management.html')));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
